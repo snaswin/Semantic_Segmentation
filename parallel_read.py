@@ -1,9 +1,11 @@
 import numpy as np
 import pathlib
 import cv2
-from numba import jit
 import glob
 from time import time
+#from scipy.misc import imread
+from sklearn.externals.joblib import Parallel, delayed
+
 
 def names(path= "./folder/*.png"):
 	fnames = glob.glob(path)
@@ -15,13 +17,10 @@ def read_images(fnames):
 		out.append(cv2.imread(name,0))
 	return np.array(out)
 
-@jit(parallel=True)
-def read_images_parallel(fnames):
-	out = []
-	for name in fnames:
-		out.append(cv2.imread(name,0))
-	return np.array(out)
 
+def read_images_parallel(fnames):
+	images = Parallel(n_jobs=4, verbose=5)( delayed(cv2.imread)(f) for f in fnames)
+	return images
 
 if __name__ == "__main__":
 	
