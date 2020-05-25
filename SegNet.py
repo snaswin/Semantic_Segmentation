@@ -9,6 +9,7 @@ import pickle
 import h5py
 from sklearn.utils import shuffle as sk_shuffle
 np.random.seed(4)
+from copy import deepcopy
 
 #parameter utils
 def weight(name, shape):
@@ -17,12 +18,13 @@ def weight(name, shape):
 def biases(name, shape):
 	return tf.get_variable(name, shape, initializer= tf.zeros_initializer(), dtype=tf.float64 )
 
-def conv2d(x, W):
-	c = tf.nn.conv2d(x, W, strides=[1,2,2,1], padding="SAME")
+def conv2d(x, W, strides=[1,2,2,1]):
+	c = tf.nn.conv2d(x, W, padding="SAME")
 	return c
 	
-def max_pool2d(x, ksize=[1,2,2,1], strides=[1,2,2,1]):
-	m = tf.nn.max_pool(x, ksize=ksize, strides=strides, padding="SAME")
+def max_pool2d(x, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool2"):
+	with tf.name_scope(name):
+		m = tf.nn.max_pool(x, ksize=ksize, strides=strides, padding="SAME")
 	return m
 
 def fc_layer(x, W):
@@ -55,11 +57,6 @@ def variable_summaries(var, name=""):
 
 def display_activation(var, name="var", reshape_height = 4, resize_scale = 5):
 	var = tf.slice(var, begin= [0,0,0,0], size=[1,get_shape(var,1),get_shape(var,2),get_shape(var,3) ] )
-	
-	# ~ var = tf.transpose(var, [3,0,1,2])
-	#paddings is off for now
-	# ~ paddings = tf.constant([[0,0],[2,2], [2, 2],[0,0]])
-	# ~ var = tf.pad(var, paddings, "CONSTANT")
 	var = tf.reshape(var, shape=(1, get_shape(var,1)*reshape_height, -1, 1) )
 	# ~ var = tf.image.resize_images(var, size=(get_shape(var,1)*resize_scale,get_shape(var,2)*resize_scale) )
 	tf.summary.image(name, var)
@@ -71,7 +68,6 @@ def display_activation_sep(var, name="var", filters= 2):
 			tmp = tf.slice(var, begin=[0,0,0,filt], size=(1, get_shape(var,1), get_shape(var, 2), 1) )
 			tf.summary.image(name+ "_" + str(filt), tmp )
 	
-	
 def display_image(var, name="var"):
 	var = tf.slice(var, begin= [0,0,0,0], size=[1,get_shape(var,1),get_shape(var,2),get_shape(var,3) ] )
 	tf.summary.image(name, var)
@@ -80,11 +76,78 @@ def display_image(var, name="var"):
 #Naming utilities
 def addNameToTensor(X, name):
 	return tf.identity(X, name=name)
+
+
+def batch_norm(X, train_flag, decay=0.999, epsilon = 1e-3):
+
+	scale = tf.Variable( tf.ones( [X.get_shape()[-1]] ) )
+	beta = tf.Variable(tf.zeros( [X.get_shape()[-1]] ) )
 	
+	population_mean = tf.Variable( tf.zeros([X.get_shape()[-1]]), trainable=False )
+	population_var = tf.Variable( tf.ones([X.get_shape()[-1]]), trainable=False )
+	
+	if train_flag == True:
+		#Moments
+		batch_mean, batch_var = tf.nn.moments( X, axes=[0, 1, 2])
+		
+		train_mean = tf.assign( population_mean, population_mean*decay +  batch_mean*(1-decay) )
+		train_var = tf.assign( population_var, population_var*decay + batch_var*(1-decay) )
+		
+		with tf.control_dependencies( [train_mean, train_var] ):
+			X_bn = tf.nn.batch_normalization( X, batch_mean, batch_var, beta, scale, epsilon)
+	
+	else:
+		X_bn = tf.nn.batch_normalization( X, population_mean, population_var, beta, scale, epsilon )
+	
+	return X_bn
+
+
+#Encode- BLUE block as per SegNet paper
+def Conv_BN_Act_block(X, kernel=[3,3,1,4], strides=[1,2,2,1], name="Encoder_1", train_flag=True):	
+	with tf.name_scope(name):
+		with tf.name_scope("Conv"):				
+			W1_conv = weight("W_conv",kernel)
+			b1_conv = biases("b_conv", [1, kernel[-1] ])
+			Z1_conv = conv2d(self.X1, W1_conv, strides) + b1_conv
+		
+		with tf.name_scope("BatchNorm"):
+			Z1_bn = batch_norm(X, train_flag, decay=0.999, epsilon = 1e-3)
+			
+		with tf.name_scope("ReLU"):
+			A1 = tf.nn.relu(Z1_bn)
+	return A1
+
+#Decode- Upsampling using Conv2D_transpose- (Deconvolve, but not exactly)
+def conv2d_transpose(X, kernel=[3,3,128,1], strides=[1,2,2,1], name="Upsample_1"):
+	#SHAPE- tutorial
+	### Conv ###
+	#input = [64,7,7,3]
+	# w = [3,3,3,256]
+	# strides = [1,2,2,1] & SAME padding
+	## outshape = [64,7,7,256]
+
+	### Conv_Transpose ###
+	#input = [64,7,7,3]
+	# w = [3,3,128,3]
+	# strides = [1,2,2,1] & SAME padding
+	## outshape = [64,14,14,128]
+
+	#Do not use input placeholder with NONE in batchsize as tf.nn.conv2d_transpose doesnt support automatic outshape interpretation
+	with tf.variable_scope(name):			
+		s = X.get_shape()
+		output_shape = [s[0], s[1]*strides[1], s[2]*strides[2], kernel[2] ]
+		
+		W_convt = weight("W_convt", kernel)
+		out = tf.nn.conv2d_transpose(X, W_convt, output_shape, strides, padding="SAME")
+	return out
+
+
+
 
 ########################################################################
 ##	Build a CNN architecture
 ########################################################################
+
 def compute_accuracy(Zout, Y):
 	logits = tf.cast(Zout, tf.float64)
 	labels = Y
@@ -97,122 +160,72 @@ def compute_accuracy(Zout, Y):
 
 #model graph
 class Model:
-	def __init__(self, n_out, num1 = 28, num2 = 28, feature_size=7):
+	def __init__(self, num1 = 28, num2 = 28):
 		
 		with tf.variable_scope("Model"):
-			self.define_model(num1, num2, feature_size, n_out)
+			self.define_model(num1, num2)
 			
-	def define_model(self,num1, num2, feature_size, n_out):
-		pooling = False
+	def define_model(self,num1, num2):
+		
 		#create placeholders
-		self.X = tf.placeholder(tf.float64, [None, feature_size, num1, num2], name="X")
-		print(self.X.shape)
-		self.X1 = tf.reshape(self.X, shape=[-1, feature_size*num1, num2, 1], name="X_shaped")
-
-		display_image(self.X1, name="X1")
+		self.X = tf.placeholder(tf.float32, [None, num1, num2, 1], name="X")
+		print(self.X.shape)		
+		display_image(self.X, name="X")
 		
-		self.Y = tf.placeholder(tf.float64, [None, n_out], name="Y")
-		self.keep_prob = tf.placeholder(tf.float64, name="keep_prob")
-
-		self.th = tf.placeholder(tf.float64, name="th")
-
-		#-----------------------------------------------------------------------
-		#	Conv 1 layer + pool layer
-		#-----------------------------------------------------------------------
-		with tf.name_scope("Conv1"):
-			W1_conv = weight("W1_conv",[3,3,1,4])
-			b1_conv = biases("b1_conv", [1, 4])
-			A1_conv = tf.nn.relu(conv2d(self.X1, W1_conv) + b1_conv)
-		display_activation_sep(A1_conv, name="A1_conv", filters= 4)
+		self.Y = tf.cast( tf.math.greater(self.X, tf.constant(0.0, dtype=tf.float32) ), dtype=tf.int8, name="Y")
+		display_image(self.Y, name="Y")
 		
-		tf.summary.histogram('A1_conv', A1_conv)
+		self.train_flag = tf.placeholder(tf.bool, name="train_flag")
 		
-		if pooling == True:				
-			with tf.name_scope("Pool1"):
-				A1_pool = max_pool2d(A1_conv, ksize=[1,2,2,1])
-		else:
-			A1_pool = A1_conv
-			
 		#-----------------------------------------------------------------------
-		#	Conv 2 layer + pool layer
+		#	Conv 1 layer + BN + ReLU layer
 		#-----------------------------------------------------------------------
-		with tf.name_scope("Conv2"):
-			W2_conv = weight("W2_conv",[3,3,4, 2])
-			b2_conv = biases("b2_conv", [1, 2])
-			A2_conv = tf.nn.relu(conv2d(A1_pool, W2_conv) + b2_conv)
+		
+		A1 = Conv_BN_Act_block(self.X, kernel=[3,3,1,256], strides=[1,2,2,1], name="Encoder_1", train_flag= self.train_flag)
+		display_activation_sep(A1, name="A1", filters= 256)
+		tf.summary.histogram('A1', A1)
+		
+		A1 = max_pool2d(A1, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool1")
+		
+		#Encode2
+		A2 = Conv_BN_Act_block(A1, kernel=[3,3,256,32], strides=[1,2,2,1], name="Encoder_2", train_flag= self.train_flag)
+		A2 = max_pool2d(A2, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool2")
 		# ~ display_activation(A2_conv, name="A2_conv", reshape_height = 4, resize_scale = 5)
-		display_activation_sep(A2_conv, name="A2_conv", filters= 2)
+		#display_activation_sep(A2_conv, name="A2_conv", filters= 2)		
 		
-		if pooling == True:				
-			with tf.name_scope("Pool2"):
-				A2_pool = max_pool2d(A2_conv, ksize=[1,2,2,1])
-		else:
-			A2_pool = A2_conv
+		#Encode3
+		A3 = Conv_BN_Act_block(A2, kernel=[3,3,32,8], strides=[1,2,2,1], name="Encoder_3", train_flag= self.train_flag)
+		A3 = max_pool2d(A3, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool3")
 		
-		# ~ #-----------------------------------------------------------------------
-		# ~ #	Conv 3 layer + pool layer
-		# ~ #-----------------------------------------------------------------------
-		# ~ with tf.name_scope("Conv3"):
-			# ~ W3_conv = weight("W3_conv",[3,3,8,16])
-			# ~ b3_conv = biases("b3_conv", [1, 16])
-			# ~ A3_conv = tf.nn.relu(conv2d(A2_pool, W3_conv) + b3_conv)
-		# ~ display_activation_sep(A3_conv, name="A3_conv", filters= 16)
+		#Decode4
+		A4 = conv2d_transpose(A3, kernel=[3,3,32,8], strides=[1,2,2,1], name="Upsample_1")
+		A4 = Conv_BN_Act_block(A3, kernel=[3,3,32,64], strides=[1,2,2,1], name="Decode_4", train_flag= self.train_flag)
 		
-		# ~ if pooling == True:				
-			# ~ with tf.name_scope("Pool3"):
-				# ~ A3_pool = max_pool2d(A3_conv, ksize=[1,2,2,1])
-		# ~ else:
-			# ~ A3_pool = A3_conv
+		#Decode5
+		A5 = conv2d_transpose(A4, kernel=[3,3,128,64], strides=[1,2,2,1], name="Upsample_2")
+		A5 = Conv_BN_Act_block(A5, kernel=[3,3,128,256], strides=[1,2,2,1], name="Decode_5", train_flag= self.train_flag)
 		
-		#-----------------------------------------------------------------------
-		#	Flatten
-		#-----------------------------------------------------------------------
-		#A_flatten = flatten(A4_pool)
-		self.fv = flatten(A2_pool)
-		tf.summary.histogram('fv', self.fv)
-		
-		#-----------------------------------------------------------------------
-		#	fc1
-		#-----------------------------------------------------------------------
-		with tf.name_scope("fc1"):
-			#W_fc1 = weight("W_fc1", [get_shape(A_flatten, index=1), 1024])
-			W_fc1 = weight("W_fc1", [504, 32])
-			b_fc1 = biases("b_fc1", [1,32])
-			A_fc1 = tf.nn.relu(fc_layer(self.fv, W_fc1) + b_fc1 )	
+		#Decode6
+		A6 = conv2d_transpose(A5, kernel=[3,3,256,256], strides=[1,2,2,1], name="Upsample_3")
+		A6 = Conv_BN_Act_block(A6, kernel=[3,3,256,256], strides=[1,2,2,1], name="Decode_6", train_flag= self.train_flag)
 
-		tf.summary.histogram('A_fc1', A_fc1)
-		#-----------------------------------------------------------------------
-		#	Dropout
-		#-----------------------------------------------------------------------
-		with tf.name_scope("Dropout"):
-			A_dropout = tf.nn.dropout(A_fc1, self.keep_prob)
-		#-----------------------------------------------------------------------
-		#	fc2
-		#-----------------------------------------------------------------------
-		with tf.name_scope("fc2"):
-			#W_fc2 = weight("W_fc2", [get_shape(A_flatten, index=1), 2])
-			W_fc2 = weight("W_fc2", [32, n_out])
-			b_fc2 = biases("b_fc2", [1,n_out])
-			Z_fc2 = tf.add( fc_layer(A_dropout, W_fc2) , b_fc2, name="Zout")
-			#This is Z , not A
-			#self.logits = tf.nn.softmax(Z_fc2, name="logits")
-			self.logits = Z_fc2
-		
+
+		########
+		self.logits = A6
 		tf.summary.histogram('logits', self.logits)
 		
 		
-		self.predict = tf.to_int32( self.logits > self.th, name = "predict")
-		tf.summary.histogram('predict', self.predict)
+		# ~ self.predict = tf.to_int32( self.logits > self.th, name = "predict")
+		# ~ tf.summary.histogram('predict', self.predict)
 		
 		
 		#self.Y_hot = tf.one_hot(tf.cast(tf.reshape(self.Y, [-1]) , tf.uint8) , depth= n_out)
 		#print("Y_hot shape", self.Y_hot.shape)
-		
-		self.loss = tf.losses.mean_squared_error(self.Y , self.logits)
-		#self.loss = tf.keras.losses.categorical_crossentropy(self.Y, self.logits)
+
+		self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.Y , logits= self.logits)
 		tf.summary.scalar("loss", self.loss)
 		
-		self.accuracy = compute_accuracy(self.predict, self.Y)
+		self.accuracy = compute_accuracy(self.logits, self.Y)
 		tf.summary.scalar("accuracy", self.accuracy)
 
 		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-2).minimize(self.loss)
@@ -220,16 +233,12 @@ class Model:
 		
 		self.merged = tf.summary.merge_all()
 		
-	def test(self, sess, x_batch, y_batch):
-		 test_loss, test_accu, test_summary, logits = sess.run([self.loss, self.accuracy, self.merged, self.logits], feed_dict={self.X: x_batch, self.Y: y_batch, self.keep_prob: 1.0, self.th: 0.03} )
+	def test(self, sess, x_batch):
+		 test_loss, test_accu, test_summary, logits = sess.run([self.loss, self.accuracy, self.merged, self.logits], feed_dict={self.X: x_batch, self.train_flag: False} )
 		 return test_loss, test_accu, test_summary
-	
-	def train(self, sess, x_batch, y_batch):
-		summary, loss, _, accu, logits = sess.run( [self.merged, self.loss, self.optimizer, self.accuracy, self.logits], feed_dict={self.X: x_batch, self.Y: y_batch, self.keep_prob: 1.0, self.th: 0.03} )
-		# ~ print("Train logits: ", logits)
-		# ~ print("Labels ", y_batch)
-		# ~ print("Loss ", loss)
-		# ~ input("Waity")
+
+	def train(self, sess, x_batch):
+		summary, loss, _, accu, logits = sess.run( [self.merged, self.loss, self.optimizer, self.accuracy, self.logits], feed_dict={self.X: x_batch, self.train_flag: True} )
 		return summary, loss, accu
 	
 def read_js(fname="./data_pairs.json"):
@@ -246,60 +255,89 @@ def allocate():
 	config.gpu_options.allow_growth=True
 	return config
 
+def read_image(fname):
+	return cv2.imread(fname, 0)
+
 class Manager:
-	def __init__(self, sess, data_pkl, directory= "./folder/", gram_size=24, feature_size=7):
+	def __init__(self, sess, directory= "./dataset/", fmt="png", outfold="./out1/", batch_size= 64, shuffle=True, num1=512,num2=512):
 		self.directory = directory
+		self.fnames = glob.glob(self.directory + "/*."+ fmt)
+		self.outfold = outfold
 		
-		with open(data_pkl, 'rb') as infile:
-			self.data = pickle.load(infile)
+		#params
+		self.num1 = num1
+		self.num2 = num2
+		self.batch_size = batch_size
+		self.ratio = [0.8, 0.1, 0.1]
 		
-		#1) Init data
-		self.data_X = np.array(self.data["X"], dtype=np.float64)
-		self.data_y = np.array(self.data["y"], dtype=np.float64)
-		self.csv_out = self.data["csv_out"]
-		print("In Manager, Xy shapes- ", self.data_X.shape, self.data_y.shape)
+		#others
+		self.len = len(self.fnames)
+		self.inds = np.arange(self.len)
 		
-		#2) Shuffle and Split
-		## len of ratio decides no_dev: [0.8,0.1,0.1] or [0.8,0.2]
-		splits = self.split_dataset(self.data_X, self.data_y, ratio= [0.8,0.1, 0.1] , shuffle=True)
-		self.train_X, self.train_y, self.dev_X, self.dev_y, self.test_X, self.test_y = splits
+		if shuffle ==True:
+			self.inds = np.random.shuffle(self.inds)
+			tmp = []
+			for i in self.inds:
+				tmp.append( self.fnames[i] )
+			self.fnames = deepcopy(tmp)
 		
-		#save data to outfolder
+		#split_names
+		self.train_names, self.test_names, self.dev_names = self.split_names(self.fnames, self.len, self.ratio)
+
+		#save split_names to outfolder
 		jname = self.directory + "/data_splits.json"
 		jdata = {
-				"train_X": self.train_X.tolist(),
-				"train_y": self.train_y.tolist(),
-				"dev_X": self.dev_X.tolist(),
-				"dev_y": self.dev_y.tolist(),
-				"test_X": self.test_X.tolist(),
-				"test_y": self.test_y.tolist()
+				"train_names": self.train_names,
+				"test_names": self.test_names,
+				"dev_names": self.dev_names,
 				}
 		write_js(jdata, jname)
 		
-		print("Train: ", self.train_X.shape, self.train_y.shape)
-		print("Dev: ", self.dev_X.shape, self.dev_y.shape)
-		print("Test: ", self.test_X.shape, self.test_y.shape)
 		
-		self.batch_size = 6
-		n_out = self.train_y.shape[1]
-
-		self.gram_size = gram_size
-		self.feature_size= feature_size
-		
-		m = self.train_X.shape[0]
+		m = len(self.train_names)
 		self.total_minibatches = math.ceil(m/self.batch_size)
 		print("Total: ", self.total_minibatches)
 		
 		self.sess = sess
 		
-		self.mod = Model(n_out, num1 = gram_size , num2 = gram_size, feature_size= feature_size)
+		self.mod = Model(num1 = self.num1 , num2 = self.num2)
 		#summary
-		self.train_writer = tf.summary.FileWriter(self.directory + "/logs/train/", self.sess.graph)
-		self.test_writer = tf.summary.FileWriter(self.directory + "/logs/test/")
+		self.train_writer = tf.summary.FileWriter(self.outfold + "/logs/train/", self.sess.graph)
+		self.test_writer = tf.summary.FileWriter(self.outfold + "/logs/test/")
 		
 		self.sess.run(self.mod.var_init)
 	
-	def split_dataset(self, data_X, data_y, ratio= [0.8,0.1, 0.1] , shuffle=True):
+	def split_names(self, fnames, length, ratio=[0.8,0.1,0.1]):
+		len_train = int(0.8*length)
+		len_test = int(0.1*length)
+		len_dev = int(0.1*length)
+		
+		train_names = fnames[:len_train]
+		test_names = fnames[len_train: len_train+len_test]
+		dev_names = fnames[len_train+len_test: ]
+		
+		return train_names, test_names, dev_names
+			
+	#fetch batch
+	def get_x_batch_names(self, train_names, batch_num):
+		if batch_num <= self.total_minibatches:
+			x_batch_names = train_names[batch_num*self.batch_size: (batch_num+1)*self.batch_size ]
+		else:
+			print("Batch num overflow")
+			exit(121)				
+		return x_batch_names
+	
+	@jit(parallel=True)
+	def read_x_batch_names(self, x_batch_names):
+		img_batch = []
+		for name in x_batch_names:
+			im = cv2.imread(name, 0)
+			img_batch.append(im)
+		
+	
+	
+	#Remove this
+	def split_dataset(self, fnames, ratio= [0.8,0.1, 0.1] , shuffle=True):
 		
 		if shuffle == True:
 			data_X, data_y = sk_shuffle(data_X, data_y, random_state=7)	#sklearn
@@ -331,19 +369,7 @@ class Manager:
 			
 			return train_X, train_y, dev_X, dev_y
 	
-	#fetch batch
-	def get_x_batch(self, data_x, batch_num):
-		if batch_num <= self.total_minibatches:
-			x_batch = data_x[batch_num*self.batch_size: (batch_num+1)*self.batch_size ]
-		else:
-			print("Batch num overflow")
-			exit(121)				
-		return x_batch
-		
-	def get_xy_batch(self, X,y,batch_num):
-		batch_x = self.get_x_batch(X, batch_num)
-		batch_y = self.get_x_batch(y, batch_num)
-		return batch_x, batch_y
+	
 		
 	def start_train(self, epochs=20):
 
@@ -356,8 +382,6 @@ class Manager:
 			for batch_num in range(self.total_minibatches):
 				x_batch, y_batch = self.get_xy_batch(self.train_X, self.train_y, batch_num)
 				train_summary, train_loss, train_accuracy = self.mod.train(self.sess, x_batch, y_batch)
-				# ~ print("Man Train loss", train_loss)
-				# ~ input("wait")
 				
 				epoch_cost = epoch_cost + train_loss/self.total_minibatches
 				epoch_accu = epoch_accu + train_accuracy/self.total_minibatches
