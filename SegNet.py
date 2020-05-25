@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 np.random.seed(4)
 from copy import deepcopy
 import cv2
+from tqdm import tqdm
 
 #parameter utils
 def weight(name, shape):
@@ -215,7 +216,7 @@ class Model:
 		A4 = conv2d_transpose(A3, kernel=[3,3,32,8], strides=[1,2,2,1], name="Upsample_1", batch_size= self.batch_size)
 		print("7 ", A4.shape)
 		
-		A4 = Conv_BN_Act_block(A4, kernel=[3,3,8,256], strides=[1,2,2,1], name="Decode_4", train_flag= self.train_flag)
+		A4 = Conv_BN_Act_block(A4, kernel=[3,3,32,256], strides=[1,2,2,1], name="Decode_4", train_flag= self.train_flag)
 		print("8 ", A4.shape)
 		
 		#Decode5
@@ -318,29 +319,29 @@ class Manager:
 		write_js(jdata, jname)
 		
 		
-		# ~ m = len(self.train_names)
-		# ~ self.total_minibatches = math.ceil(m/self.batch_size)
-		# ~ print("Total_train: ", self.total_minibatches)
-		
-		# ~ m_dev = len(self.dev_names)
-		# ~ self.total_minibatches_dev = math.ceil(m_dev/self.batch_size)
-		# ~ print("Total_dev: ", self.total_minibatches_dev)
-		
-		# ~ m_test = len(self.test_names)
-		# ~ self.total_minibatches_test = math.ceil(m_test/self.batch_size)
-		# ~ print("Total_test: ", self.total_minibatches_test)
-		
 		m = len(self.train_names)
-		self.total_minibatches = math.floor(m/self.batch_size)
+		self.total_minibatches = math.ceil(m/self.batch_size)
 		print("Total_train: ", self.total_minibatches)
 		
 		m_dev = len(self.dev_names)
-		self.total_minibatches_dev = math.floor(m_dev/self.batch_size)
+		self.total_minibatches_dev = math.ceil(m_dev/self.batch_size)
 		print("Total_dev: ", self.total_minibatches_dev)
 		
 		m_test = len(self.test_names)
-		self.total_minibatches_test = math.floor(m_test/self.batch_size)
+		self.total_minibatches_test = math.ceil(m_test/self.batch_size)
 		print("Total_test: ", self.total_minibatches_test)
+		
+		# ~ m = len(self.train_names)
+		# ~ self.total_minibatches = math.floor(m/self.batch_size)
+		# ~ print("Total_train: ", self.total_minibatches)
+		
+		# ~ m_dev = len(self.dev_names)
+		# ~ self.total_minibatches_dev = math.floor(m_dev/self.batch_size)
+		# ~ print("Total_dev: ", self.total_minibatches_dev)
+		
+		# ~ m_test = len(self.test_names)
+		# ~ self.total_minibatches_test = math.floor(m_test/self.batch_size)
+		# ~ print("Total_test: ", self.total_minibatches_test)
 		
 		
 		self.sess = sess
@@ -395,10 +396,10 @@ class Manager:
 		#Training
 		# ~ plt.ion()
 		
-		for epoch in range(epochs):
+		for epoch in tqdm(range(epochs)):
 			epoch_cost = 0.0
 			epoch_accu = 0.0	
-			for batch_num in range(self.total_minibatches):
+			for batch_num in tqdm( range(self.total_minibatches) ):
 				x_train_batch = self.get_batch(self.train_names, batch_num)
 				train_summary, train_loss, train_accuracy = self.mod.train(self.sess, x_train_batch)
 				
@@ -457,7 +458,7 @@ if __name__ == "__main__":
 	directory = "/home/aswin-rpi/Documents/GITs/test_resize/"
 	fmt = "png"
 	outfold = "/home/aswin-rpi/Documents/GITs/test_resize_OUT/"
-	batch_size = 6
+	batch_size = 5
 	shuffle = True
 	num1 = 512
 	num2 = 512
@@ -473,5 +474,9 @@ if __name__ == "__main__":
 		
 		manager.start_train(epochs)
 		
-
+	#FIXES:
+	# 1. Overcome challenge of tf.nn.conv2d_transpose limitation on batch_size specification.
+	#	Currently the training fails at the last inconsitent batch (off from batch_size remainder) in an epoch
+	# 2. Check loss and accuracy
+	# 3. Observe the expt
 	
