@@ -29,6 +29,7 @@ if __name__ == "__main__":
 	
 	st = time()
 	out = read_images(fnames)
+	print("OUT: ", out.shape)
 	t1 = time()-st
 	print("Serial: Time is ", t1)
 	

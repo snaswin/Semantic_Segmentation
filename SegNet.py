@@ -5,11 +5,10 @@ import math
 import json
 import glob
 import matplotlib.pyplot as plt
-import pickle
-import h5py
-from sklearn.utils import shuffle as sk_shuffle
+#from sklearn.utils import shuffle as sk_shuffle
 np.random.seed(4)
 from copy import deepcopy
+import cv2
 
 #parameter utils
 def weight(name, shape):
@@ -19,12 +18,12 @@ def biases(name, shape):
 	return tf.get_variable(name, shape, initializer= tf.zeros_initializer(), dtype=tf.float64 )
 
 def conv2d(x, W, strides=[1,2,2,1]):
-	c = tf.nn.conv2d(x, W, padding="SAME")
-	return c
+	conv = tf.nn.conv2d(x, W, padding="SAME")
+	return conv
 	
 def max_pool2d(x, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool2"):
-	with tf.name_scope(name):
-		m = tf.nn.max_pool(x, ksize=ksize, strides=strides, padding="SAME")
+	with tf.variable_scope(name):
+		m = tf.nn.max_pool2d(x, ksize=ksize, strides=strides, padding="SAME")
 	return m
 
 def fc_layer(x, W):
@@ -104,21 +103,21 @@ def batch_norm(X, train_flag, decay=0.999, epsilon = 1e-3):
 
 #Encode- BLUE block as per SegNet paper
 def Conv_BN_Act_block(X, kernel=[3,3,1,4], strides=[1,2,2,1], name="Encoder_1", train_flag=True):	
-	with tf.name_scope(name):
-		with tf.name_scope("Conv"):				
+	with tf.variable_scope(name):
+		with tf.variable_scope("Conv"):				
 			W1_conv = weight("W_conv",kernel)
 			b1_conv = biases("b_conv", [1, kernel[-1] ])
-			Z1_conv = conv2d(self.X1, W1_conv, strides) + b1_conv
+			Z1_conv = conv2d(X, W1_conv, strides) + b1_conv
 		
-		with tf.name_scope("BatchNorm"):
-			Z1_bn = batch_norm(X, train_flag, decay=0.999, epsilon = 1e-3)
+		with tf.variable_scope("BatchNorm"):
+			Z1_bn = batch_norm(Z1_conv, train_flag, decay=0.999, epsilon = 1e-3)
 			
-		with tf.name_scope("ReLU"):
+		with tf.variable_scope("ReLU"):
 			A1 = tf.nn.relu(Z1_bn)
 	return A1
 
 #Decode- Upsampling using Conv2D_transpose- (Deconvolve, but not exactly)
-def conv2d_transpose(X, kernel=[3,3,128,1], strides=[1,2,2,1], name="Upsample_1"):
+def conv2d_transpose(X, kernel=[3,3,128,1], strides=[1,2,2,1], name="Upsample_1", batch_size=32):
 	#SHAPE- tutorial
 	### Conv ###
 	#input = [64,7,7,3]
@@ -135,7 +134,8 @@ def conv2d_transpose(X, kernel=[3,3,128,1], strides=[1,2,2,1], name="Upsample_1"
 	#Do not use input placeholder with NONE in batchsize as tf.nn.conv2d_transpose doesnt support automatic outshape interpretation
 	with tf.variable_scope(name):			
 		s = X.get_shape()
-		output_shape = [s[0], s[1]*strides[1], s[2]*strides[2], kernel[2] ]
+		#output_shape = [s[0], s[1]*strides[1], s[2]*strides[2], kernel[2] ]
+		output_shape = [batch_size, s[1]*strides[1], s[2]*strides[2], kernel[2] ]
 		
 		W_convt = weight("W_convt", kernel)
 		out = tf.nn.conv2d_transpose(X, W_convt, output_shape, strides, padding="SAME")
@@ -151,7 +151,7 @@ def conv2d_transpose(X, kernel=[3,3,128,1], strides=[1,2,2,1], name="Upsample_1"
 def compute_accuracy(Zout, Y):
 	logits = tf.cast(Zout, tf.float64)
 	labels = Y
-	with tf.name_scope("Accuracy"):
+	with tf.variable_scope("Accuracy"):
 		# ~ correct = tf.equal(tf.argmax(logits, 1) , tf.argmax(labels, 1) )
 		# ~ accuracy = tf.reduce_mean(tf.cast(correct, tf.float32) )
 		correct = tf.equal(logits , labels)
@@ -160,19 +160,22 @@ def compute_accuracy(Zout, Y):
 
 #model graph
 class Model:
-	def __init__(self, num1 = 28, num2 = 28):
+	def __init__(self, num1 = 28, num2 = 28, batch_size=16):
+
+		self.batch_size = batch_size
 		
 		with tf.variable_scope("Model"):
 			self.define_model(num1, num2)
-			
+					
 	def define_model(self,num1, num2):
 		
 		#create placeholders
-		self.X = tf.placeholder(tf.float32, [None, num1, num2, 1], name="X")
-		print(self.X.shape)		
+		#self.X = tf.placeholder(tf.float64, [None, num1, num2, 1], name="X")
+		self.X = tf.placeholder(tf.float64, [self.batch_size, num1, num2, 1], name="X")
+		print("Model shape- ",self.X.shape)		
 		display_image(self.X, name="X")
 		
-		self.Y = tf.cast( tf.math.greater(self.X, tf.constant(0.0, dtype=tf.float32) ), dtype=tf.int8, name="Y")
+		self.Y = tf.cast( tf.math.greater(self.X, tf.constant(0.0, dtype=tf.float64) ), dtype=tf.float64, name="Y")
 		display_image(self.Y, name="Y")
 		
 		self.train_flag = tf.placeholder(tf.bool, name="train_flag")
@@ -181,33 +184,50 @@ class Model:
 		#	Conv 1 layer + BN + ReLU layer
 		#-----------------------------------------------------------------------
 		
-		A1 = Conv_BN_Act_block(self.X, kernel=[3,3,1,256], strides=[1,2,2,1], name="Encoder_1", train_flag= self.train_flag)
-		display_activation_sep(A1, name="A1", filters= 256)
+		A1 = Conv_BN_Act_block(self.X, kernel=[3,3,1,128], strides=[1,2,2,1], name="Encoder_1", train_flag= self.train_flag)
+		display_activation_sep(A1, name="A1", filters= 128)
 		tf.summary.histogram('A1', A1)
 		
+		print("1 ", A1.shape)
 		A1 = max_pool2d(A1, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool1")
+
+		print("2 ", A1.shape)
+		
 		
 		#Encode2
-		A2 = Conv_BN_Act_block(A1, kernel=[3,3,256,32], strides=[1,2,2,1], name="Encoder_2", train_flag= self.train_flag)
+		A2 = Conv_BN_Act_block(A1, kernel=[3,3,128,32], strides=[1,2,2,1], name="Encoder_2", train_flag= self.train_flag)
+		print("3 ", A2.shape)
+
 		A2 = max_pool2d(A2, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool2")
 		# ~ display_activation(A2_conv, name="A2_conv", reshape_height = 4, resize_scale = 5)
 		#display_activation_sep(A2_conv, name="A2_conv", filters= 2)		
-		
+
+		print("4 ", A2.shape)
+
 		#Encode3
 		A3 = Conv_BN_Act_block(A2, kernel=[3,3,32,8], strides=[1,2,2,1], name="Encoder_3", train_flag= self.train_flag)
+		print("5 ", A3.shape)
+
 		A3 = max_pool2d(A3, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool3")
+		print("6 ", A3.shape)
 		
 		#Decode4
-		A4 = conv2d_transpose(A3, kernel=[3,3,32,8], strides=[1,2,2,1], name="Upsample_1")
-		A4 = Conv_BN_Act_block(A3, kernel=[3,3,32,64], strides=[1,2,2,1], name="Decode_4", train_flag= self.train_flag)
+		A4 = conv2d_transpose(A3, kernel=[3,3,32,8], strides=[1,2,2,1], name="Upsample_1", batch_size= self.batch_size)
+		print("7 ", A4.shape)
+		
+		A4 = Conv_BN_Act_block(A3, kernel=[3,3,8,256], strides=[1,2,2,1], name="Decode_4", train_flag= self.train_flag)
+		print("8 ", A4.shape)
 		
 		#Decode5
-		A5 = conv2d_transpose(A4, kernel=[3,3,128,64], strides=[1,2,2,1], name="Upsample_2")
-		A5 = Conv_BN_Act_block(A5, kernel=[3,3,128,256], strides=[1,2,2,1], name="Decode_5", train_flag= self.train_flag)
+		A5 = conv2d_transpose(A4, kernel=[3,3,32,256], strides=[1,2,2,1], name="Upsample_2", batch_size= self.batch_size)
+		print("9 ", A5.shape)
+
+		A5 = Conv_BN_Act_block(A5, kernel=[3,3,32,8], strides=[1,2,2,1], name="Decode_5", train_flag= self.train_flag)
+		print("10 ", A5.shape)
 		
 		#Decode6
-		A6 = conv2d_transpose(A5, kernel=[3,3,256,256], strides=[1,2,2,1], name="Upsample_3")
-		A6 = Conv_BN_Act_block(A6, kernel=[3,3,256,256], strides=[1,2,2,1], name="Decode_6", train_flag= self.train_flag)
+		A6 = conv2d_transpose(A5, kernel=[3,3,1,8], strides=[1,4,4,1], name="Upsample_3", batch_size= self.batch_size)
+		print("11 ", A6.shape)
 
 
 		########
@@ -221,9 +241,12 @@ class Model:
 		
 		#self.Y_hot = tf.one_hot(tf.cast(tf.reshape(self.Y, [-1]) , tf.uint8) , depth= n_out)
 		#print("Y_hot shape", self.Y_hot.shape)
-
-		self.loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.Y , logits= self.logits)
-		tf.summary.scalar("loss", self.loss)
+		
+		print("Logits: ", self.logits.shape)
+		print("Labels: ", self.Y.shape)
+		
+		self.loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.Y , logits= self.logits)
+		#tf.summary.scalar("loss", self.loss)
 		
 		self.accuracy = compute_accuracy(self.logits, self.Y)
 		tf.summary.scalar("accuracy", self.accuracy)
@@ -273,9 +296,10 @@ class Manager:
 		#others
 		self.len = len(self.fnames)
 		self.inds = np.arange(self.len)
+		print("inds -", self.inds)
 		
 		if shuffle ==True:
-			self.inds = np.random.shuffle(self.inds)
+			np.random.shuffle(self.inds)
 			tmp = []
 			for i in self.inds:
 				tmp.append( self.fnames[i] )
@@ -300,13 +324,14 @@ class Manager:
 		
 		self.sess = sess
 		
-		self.mod = Model(num1 = self.num1 , num2 = self.num2)
+		self.mod = Model(num1 = self.num1 , num2 = self.num2, batch_size = self.batch_size)
 		#summary
 		self.train_writer = tf.summary.FileWriter(self.outfold + "/logs/train/", self.sess.graph)
 		self.test_writer = tf.summary.FileWriter(self.outfold + "/logs/test/")
 		
 		self.sess.run(self.mod.var_init)
-	
+		
+	#Use within init
 	def split_names(self, fnames, length, ratio=[0.8,0.1,0.1]):
 		len_train = int(0.8*length)
 		len_test = int(0.1*length)
@@ -327,72 +352,46 @@ class Manager:
 			exit(121)				
 		return x_batch_names
 	
-	@jit(parallel=True)
+	#read images
 	def read_x_batch_names(self, x_batch_names):
-		img_batch = []
+		out = []
 		for name in x_batch_names:
-			im = cv2.imread(name, 0)
-			img_batch.append(im)
-		
+			out.append(cv2.imread(name,0).reshape(self.num1, self.num2, 1) )
+		return np.array(out)
+	
+	#Use during training: uses the above two functions- get & read x_batch_names
+	def get_batch(self, train_names, batch_num):
+		#1
+		x_batch_names = self.get_x_batch_names(train_names, batch_num)
+		#2
+		x_batch = self.read_x_batch_names(x_batch_names)
+		return x_batch
 	
 	
-	#Remove this
-	def split_dataset(self, fnames, ratio= [0.8,0.1, 0.1] , shuffle=True):
-		
-		if shuffle == True:
-			data_X, data_y = sk_shuffle(data_X, data_y, random_state=7)	#sklearn
-			
-		m = data_X.shape[0]
-		
-		if len(ratio) == 3:
-			j = 1
-			while j<len(ratio):
-				ratio[j] = ratio[j] + ratio[j-1]
-				j = j+1
-			
-			train_X = data_X[:int(m*ratio[0]) ]
-			train_y = data_y[:int(m*ratio[0]) ]
-			
-			dev_X = data_X[int(m*ratio[0]): int(m*ratio[1])]
-			dev_y = data_y[int(m*ratio[0]): int(m*ratio[1])]
-			
-			test_X = data_X[int(m*ratio[1]): int(m*ratio[2])]
-			test_y = data_y[int(m*ratio[1]): int(m*ratio[2])]
-			
-			return train_X, train_y, dev_X, dev_y, test_X, test_y
-		else:
-			train_X = data_X[:int(m*ratio[0]) ]
-			train_y = data_y[:int(m*ratio[0]) ]
-			
-			dev_X = data_X[int(m*ratio[0]): int(m*ratio[1])]
-			dev_y = data_y[int(m*ratio[0]): int(m*ratio[1])]
-			
-			return train_X, train_y, dev_X, dev_y
-	
-	
-		
+	#TRAIN	
 	def start_train(self, epochs=20):
 
 		#Training
-		plt.ion()
+		# ~ plt.ion()
 		
 		for epoch in range(epochs):
 			epoch_cost = 0.0
 			epoch_accu = 0.0	
 			for batch_num in range(self.total_minibatches):
-				x_batch, y_batch = self.get_xy_batch(self.train_X, self.train_y, batch_num)
-				train_summary, train_loss, train_accuracy = self.mod.train(self.sess, x_batch, y_batch)
+				x_train_batch = self.get_batch(self.train_names, batch_num)
+				train_summary, train_loss, train_accuracy = self.mod.train(self.sess, x_train_batch)
 				
 				epoch_cost = epoch_cost + train_loss/self.total_minibatches
 				epoch_accu = epoch_accu + train_accuracy/self.total_minibatches
 			
 			#Run accu for test
 			#epoch_acc_test, test_summary = self.sess.run( [self.mod.accuracy, self.mod.merged], feed_dict={self.mod} )
-			epoch_cost_dev, epoch_accu_dev, dev_summary = self.mod.test(self.sess, self.dev_X, self.dev_y)
+			x_dev_batch = self.read_x_batch_names(self.dev_names)
+			epoch_cost_dev, epoch_accu_dev, dev_summary = self.mod.test(self.sess, x_dev_batch)
 			
-			plt.scatter(epoch, epoch_accu, c='r', label="train")
-			plt.scatter(epoch, epoch_accu_dev, c='b', label="dev")
-			plt.pause(0.01)
+			# ~ plt.scatter(epoch, epoch_accu, c='r', label="train")
+			# ~ plt.scatter(epoch, epoch_accu_dev, c='b', label="dev")
+			# ~ plt.pause(0.01)
 			
 			# ~ if epoch%2 == 0:				
 			self.train_writer.add_summary(train_summary, epoch)
@@ -401,15 +400,16 @@ class Manager:
 			print("At epoch {}, training cost: {} & Train Accuracy: {}".format(epoch, epoch_cost, epoch_accu) )
 			print("\t testing cost: {} & Test Accuracy: {}".format(epoch_cost_dev, epoch_accu_dev) )
 		
-		plt.legend()
-		plt.show()
-				
-		epoch_cost_test, epoch_accu_test, _ = self.mod.test(self.sess, self.test_X, self.test_y)
+		# ~ plt.legend()
+		# ~ plt.show()
+		
+		x_test_batch = self.read_x_batch_names(self.test_names)
+		epoch_cost_test, epoch_accu_test, _ = self.mod.test(self.sess, x_test_batch)
 		print("Test Performance: Cost= {} & Accu= {} ".format(epoch_cost_test, epoch_accu_test) )
 		
 		input("Save?")
 
-		tf.saved_model.simple_save(sess, self.directory + "/model/", inputs={"X":self.mod.X, "Y": self.mod.Y, "keep_prob":self.mod.keep_prob, "th":self.mod.th}, outputs={"predict":self.mod.predict, "accuracy": self.mod.accuracy})
+		tf.saved_model.simple_save(self.sess, self.outfold + "/model/", inputs={"X":self.mod.X, "train_flag":self.mod.train_flag}, outputs={"predict":self.mod.logits, "accuracy": self.mod.accuracy})
 		
 		
 		perf_log = {
@@ -421,22 +421,29 @@ class Manager:
 					"epoch_accu_test": float(epoch_accu_test)
 					}
 		
-		write_js(perf_log, fname= self.directory + "/model_performance_logs.json")
-				
+		write_js(perf_log, fname= self.outfold + "/model_performance_logs.json")
 		
 		
 		#######################################################
 		
 if __name__ == "__main__":
 	
-	data_pkl = "/media/aswin/Data/GITs/Kyma/Data/b4_GAF_Xy.pkl"
-	directory = "/media/aswin/Data/GITs/Kyma/Data/CNN/v4_b4_GAF_Xy/"
+	directory = "/home/ai-nano/Documents/McMaster_box/test/test_resize_read/"
+	fmt = "png"
+	outfold = "/home/ai-nano/Documents/McMaster_box/test/test_resize_read_OUT1/"
+	batch_size = 4
+	shuffle = True
+	num1 = 512
+	num2 = 512
+	
 	epochs = 100
 	
+	
 	pathlib.Path(directory).mkdir(exist_ok=True, parents=True)
+	pathlib.Path(outfold).mkdir(exist_ok=True, parents=True)
 	
 	with tf.Session(config=allocate() ) as sess:		
-		manager = Manager( sess, data_pkl, directory, gram_size=24, feature_size=7)
+		manager = Manager( sess, directory, fmt, outfold, batch_size, shuffle, num1, num2)
 		
 		manager.start_train(epochs)
 		
