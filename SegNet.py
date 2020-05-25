@@ -215,7 +215,7 @@ class Model:
 		A4 = conv2d_transpose(A3, kernel=[3,3,32,8], strides=[1,2,2,1], name="Upsample_1", batch_size= self.batch_size)
 		print("7 ", A4.shape)
 		
-		A4 = Conv_BN_Act_block(A3, kernel=[3,3,8,256], strides=[1,2,2,1], name="Decode_4", train_flag= self.train_flag)
+		A4 = Conv_BN_Act_block(A4, kernel=[3,3,8,256], strides=[1,2,2,1], name="Decode_4", train_flag= self.train_flag)
 		print("8 ", A4.shape)
 		
 		#Decode5
@@ -226,7 +226,7 @@ class Model:
 		print("10 ", A5.shape)
 		
 		#Decode6
-		A6 = conv2d_transpose(A5, kernel=[3,3,1,8], strides=[1,4,4,1], name="Upsample_3", batch_size= self.batch_size)
+		A6 = conv2d_transpose(A5, kernel=[3,3,1,8], strides=[1,2,2,1], name="Upsample_3", batch_size= self.batch_size)
 		print("11 ", A6.shape)
 
 
@@ -318,9 +318,30 @@ class Manager:
 		write_js(jdata, jname)
 		
 		
+		# ~ m = len(self.train_names)
+		# ~ self.total_minibatches = math.ceil(m/self.batch_size)
+		# ~ print("Total_train: ", self.total_minibatches)
+		
+		# ~ m_dev = len(self.dev_names)
+		# ~ self.total_minibatches_dev = math.ceil(m_dev/self.batch_size)
+		# ~ print("Total_dev: ", self.total_minibatches_dev)
+		
+		# ~ m_test = len(self.test_names)
+		# ~ self.total_minibatches_test = math.ceil(m_test/self.batch_size)
+		# ~ print("Total_test: ", self.total_minibatches_test)
+		
 		m = len(self.train_names)
-		self.total_minibatches = math.ceil(m/self.batch_size)
-		print("Total: ", self.total_minibatches)
+		self.total_minibatches = math.floor(m/self.batch_size)
+		print("Total_train: ", self.total_minibatches)
+		
+		m_dev = len(self.dev_names)
+		self.total_minibatches_dev = math.floor(m_dev/self.batch_size)
+		print("Total_dev: ", self.total_minibatches_dev)
+		
+		m_test = len(self.test_names)
+		self.total_minibatches_test = math.floor(m_test/self.batch_size)
+		print("Total_test: ", self.total_minibatches_test)
+		
 		
 		self.sess = sess
 		
@@ -386,9 +407,14 @@ class Manager:
 			
 			#Run accu for test
 			#epoch_acc_test, test_summary = self.sess.run( [self.mod.accuracy, self.mod.merged], feed_dict={self.mod} )
-			x_dev_batch = self.read_x_batch_names(self.dev_names)
-			epoch_cost_dev, epoch_accu_dev, dev_summary = self.mod.test(self.sess, x_dev_batch)
-			
+			epoch_cost_dev, epoch_accu_dev = 0.0, 0.0
+			for bd in range(self.total_minibatches_dev):
+				x_dev_batch = self.get_batch(self.dev_names, bd)
+				epoch_loss_dev, epoch_accu_dev_batch, dev_summary = self.mod.test(self.sess, x_dev_batch)
+
+				epoch_cost_dev = epoch_cost_dev + epoch_loss_dev/self.total_minibatches_dev
+				epoch_accu_dev = epoch_accu_dev + epoch_accu_dev_batch/self.total_minibatches_dev
+				
 			# ~ plt.scatter(epoch, epoch_accu, c='r', label="train")
 			# ~ plt.scatter(epoch, epoch_accu_dev, c='b', label="dev")
 			# ~ plt.pause(0.01)
@@ -402,10 +428,10 @@ class Manager:
 		
 		# ~ plt.legend()
 		# ~ plt.show()
-		
-		x_test_batch = self.read_x_batch_names(self.test_names)
-		epoch_cost_test, epoch_accu_test, _ = self.mod.test(self.sess, x_test_batch)
-		print("Test Performance: Cost= {} & Accu= {} ".format(epoch_cost_test, epoch_accu_test) )
+		epoch_cost_test, epoch_accu_test = 0.0, 0.0
+		# ~ x_test_batch = self.read_x_batch_names(self.test_names)
+		# ~ epoch_cost_test, epoch_accu_test, _ = self.mod.test(self.sess, x_test_batch)
+		# ~ print("Test Performance: Cost= {} & Accu= {} ".format(epoch_cost_test, epoch_accu_test) )
 		
 		input("Save?")
 
@@ -428,15 +454,15 @@ class Manager:
 		
 if __name__ == "__main__":
 	
-	directory = "/home/ai-nano/Documents/McMaster_box/test/test_resize_read/"
+	directory = "/home/aswin-rpi/Documents/GITs/test_resize/"
 	fmt = "png"
-	outfold = "/home/ai-nano/Documents/McMaster_box/test/test_resize_read_OUT1/"
-	batch_size = 4
+	outfold = "/home/aswin-rpi/Documents/GITs/test_resize_OUT/"
+	batch_size = 6
 	shuffle = True
 	num1 = 512
 	num2 = 512
 	
-	epochs = 100
+	epochs = 10
 	
 	
 	pathlib.Path(directory).mkdir(exist_ok=True, parents=True)
