@@ -242,12 +242,13 @@ class Model:
 		print("Labels: ", self.Y.shape)
 		
 		self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.Y , logits= self.logits)
-		#tf.summary.scalar("loss", self.loss)
+		self.loss = tf.reduce_sum(self.loss)
+		tf.summary.scalar("loss", self.loss)
 		
 		self.accuracy = compute_accuracy(self.logits, self.Y)
 		tf.summary.scalar("accuracy", self.accuracy)
 
-		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-2).minimize(self.loss)
+		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-1).minimize(self.loss)
 		self.var_init = tf.global_variables_initializer()
 		
 		self.merged = tf.summary.merge_all()
@@ -376,8 +377,8 @@ class Manager:
 			for batch_num in range(self.total_minibatches):
 				x_train_batch = self.get_batch(self.train_names, batch_num)
 				
-				tmpX = self.sess.run(self.mod.X, feed_dict={self.mod.X: x_train_batch} )
-				tmpY = self.sess.run(self.mod.Y, feed_dict={self.mod.X: x_train_batch} )
+				# ~ tmpX = self.sess.run(self.mod.X, feed_dict={self.mod.X: x_train_batch} )
+				# ~ tmpY = self.sess.run(self.mod.Y, feed_dict={self.mod.X: x_train_batch} )
 				
 				# ~ print("\n## X: ", tmpX.min(), tmpX.max())
 				# ~ print("\n## Y: ", tmpY.min(), tmpY.max() )
