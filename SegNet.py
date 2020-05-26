@@ -117,7 +117,7 @@ def Conv_BN_Act_block(X, kernel=[3,3,1,4], strides=[1,2,2,1], name="Encoder_1", 
 	return A1
 
 #Decode- Upsampling using Conv2D_transpose- (Deconvolve, but not exactly)
-def conv2d_transpose(X, kernel=[3,3,128,1], strides=[1,2,2,1], name="Upsample_1", batch_size=32):
+def conv2d_transpose(X, kernel=[3,3,128,1], strides=[1,2,2,1], name="Upsample_1"):
 	#SHAPE- tutorial
 	### Conv ###
 	#input = [64,7,7,3]
@@ -135,8 +135,10 @@ def conv2d_transpose(X, kernel=[3,3,128,1], strides=[1,2,2,1], name="Upsample_1"
 	with tf.variable_scope(name):			
 		s = X.get_shape()
 		#output_shape = [s[0], s[1]*strides[1], s[2]*strides[2], kernel[2] ]
-		output_shape = [batch_size, s[1]*strides[1], s[2]*strides[2], kernel[2] ]
+		output_shape = tf.stack( [ tf.shape(X)[0] , s[1]*strides[1], s[2]*strides[2], kernel[2] ] )
 		
+		#output_shape = [-1, s[1]*strides[1], s[2]*strides[2], kernel[2] ]
+		#output_shape = tf.shape(X)	#works
 		W_convt = weight("W_convt", kernel)
 		out = tf.nn.conv2d_transpose(X, W_convt, output_shape, strides, padding="SAME")
 	return out
@@ -160,9 +162,7 @@ def compute_accuracy(Zout, Y):
 
 #model graph
 class Model:
-	def __init__(self, num1 = 28, num2 = 28, batch_size=16):
-
-		self.batch_size = batch_size
+	def __init__(self, num1 = 28, num2 = 28):
 		
 		with tf.variable_scope("Model"):
 			self.define_model(num1, num2)
@@ -170,12 +170,12 @@ class Model:
 	def define_model(self,num1, num2):
 		
 		#create placeholders
-		#self.X = tf.placeholder(tf.float64, [None, num1, num2, 1], name="X")
-		self.X = tf.placeholder(tf.float64, [self.batch_size, num1, num2, 1], name="X")
+		self.X = tf.placeholder(tf.float64, [None, num1, num2, 1], name="X")
+
 		print("Model shape- ",self.X.shape)		
 		display_image(self.X, name="X")
 		
-		self.Y = tf.cast( tf.math.greater(self.X, tf.constant(0.0, dtype=tf.float64) ), dtype=tf.float64, name="Y")
+		self.Y = tf.stop_gradient( tf.cast( tf.math.greater(self.X, tf.constant(0.0, dtype=tf.float64) ), dtype=tf.float64), name="Y" )
 		display_image(self.Y, name="Y")
 		
 		self.train_flag = tf.placeholder(tf.bool, name="train_flag")
@@ -184,56 +184,52 @@ class Model:
 		#	Conv 1 layer + BN + ReLU layer
 		#-----------------------------------------------------------------------
 		
-		A1 = Conv_BN_Act_block(self.X, kernel=[3,3,1,128], strides=[1,2,2,1], name="Encoder_1", train_flag= self.train_flag)
+		A1 = Conv_BN_Act_block(self.X, kernel=[3,3,1,128], strides=[1,2,2,1], name="ConvBA_1", train_flag= self.train_flag)
 		display_activation_sep(A1, name="A1", filters= 128)
-		tf.summary.histogram('A1', A1)
+		#tf.summary.histogram('ConvBA_1', A1)
 		
-		print("1 ", A1.shape)
-		A1 = max_pool2d(A1, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool1")
-
-		print("2 ", A1.shape)
-		
+		A2 = max_pool2d(A1, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_2")
 		
 		#Encode2
-		A2 = Conv_BN_Act_block(A1, kernel=[3,3,128,32], strides=[1,2,2,1], name="Encoder_2", train_flag= self.train_flag)
-		print("3 ", A2.shape)
-
-		A2 = max_pool2d(A2, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool2")
+		A3 = Conv_BN_Act_block(A2, kernel=[3,3,128,64], strides=[1,2,2,1], name="ConvBA_3", train_flag= self.train_flag)		
+		A4 = max_pool2d(A3, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_4")
+		
 		# ~ display_activation(A2_conv, name="A2_conv", reshape_height = 4, resize_scale = 5)
 		#display_activation_sep(A2_conv, name="A2_conv", filters= 2)		
 
-		print("4 ", A2.shape)
-
 		#Encode3
-		A3 = Conv_BN_Act_block(A2, kernel=[3,3,32,8], strides=[1,2,2,1], name="Encoder_3", train_flag= self.train_flag)
-		print("5 ", A3.shape)
-
-		A3 = max_pool2d(A3, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool3")
-		print("6 ", A3.shape)
+		A5 = Conv_BN_Act_block(A4, kernel=[3,3,64,32], strides=[1,2,2,1], name="ConvBA_5", train_flag= self.train_flag)
+		A6 = max_pool2d(A5, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_6")
 		
 		#Decode4
-		A4 = conv2d_transpose(A3, kernel=[3,3,32,8], strides=[1,2,2,1], name="Upsample_1", batch_size= self.batch_size)
-		print("7 ", A4.shape)
-		
-		A4 = Conv_BN_Act_block(A3, kernel=[3,3,8,256], strides=[1,2,2,1], name="Decode_4", train_flag= self.train_flag)
-		print("8 ", A4.shape)
+		A7 = conv2d_transpose(A6, kernel=[3,3,16,32], strides=[1,2,2,1], name="ConvTrans_7")
+		A8 = Conv_BN_Act_block(A7, kernel=[3,3,16,16], strides=[1,2,2,1], name="ConvBA_8", train_flag= self.train_flag)
 		
 		#Decode5
-		A5 = conv2d_transpose(A4, kernel=[3,3,32,256], strides=[1,2,2,1], name="Upsample_2", batch_size= self.batch_size)
-		print("9 ", A5.shape)
-
-		A5 = Conv_BN_Act_block(A5, kernel=[3,3,32,8], strides=[1,2,2,1], name="Decode_5", train_flag= self.train_flag)
-		print("10 ", A5.shape)
+		A9 = conv2d_transpose(A8, kernel=[3,3,8,16], strides=[1,2,2,1], name="ConvTrans_9")
+		A10 = Conv_BN_Act_block(A9, kernel=[3,3,8,4], strides=[1,2,2,1], name="ConvBA_10", train_flag= self.train_flag)
 		
 		#Decode6
-		A6 = conv2d_transpose(A5, kernel=[3,3,1,8], strides=[1,4,4,1], name="Upsample_3", batch_size= self.batch_size)
-		print("11 ", A6.shape)
-
+		A11 = conv2d_transpose(A10, kernel=[3,3,1,4], strides=[1,2,2,1], name="ConvTrans_11")
 
 		########
-		self.logits = A6
-		tf.summary.histogram('logits', self.logits)
+		self.logits = A11
+		#tf.summary.histogram('logits', self.logits)
 		
+		#============#
+		print("A1 : ", A1.shape)
+		print("A2 : ", A2.shape)
+		print("A3 : ", A3.shape)
+		print("A4 : ", A4.shape)
+		print("A5 : ", A5.shape)
+		print("A6 : ", A6.shape)
+		print("A7 : ", A7.shape)
+		print("A8 : ", A8.shape)
+		print("A9 : ", A9.shape)
+		print("A10 : ", A10.shape)
+		print("A11 : ", A11.shape)
+		
+		#============#
 		
 		# ~ self.predict = tf.to_int32( self.logits > self.th, name = "predict")
 		# ~ tf.summary.histogram('predict', self.predict)
@@ -245,7 +241,7 @@ class Model:
 		print("Logits: ", self.logits.shape)
 		print("Labels: ", self.Y.shape)
 		
-		self.loss = tf.nn.softmax_cross_entropy_with_logits_v2(labels=self.Y , logits= self.logits)
+		self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.Y , logits= self.logits)
 		#tf.summary.scalar("loss", self.loss)
 		
 		self.accuracy = compute_accuracy(self.logits, self.Y)
@@ -271,7 +267,7 @@ def read_js(fname="./data_pairs.json"):
 
 def write_js(data, fname="./data_pairs.json"):
 	with open(fname, 'w') as outfile:
-		json.dump(fp=outfile, obj=data, indent=2)
+		json.dump(fp=outfile, obj=data, indent=4)
 
 def allocate():
 	config = tf.ConfigProto()
@@ -309,7 +305,7 @@ class Manager:
 		self.train_names, self.test_names, self.dev_names = self.split_names(self.fnames, self.len, self.ratio)
 
 		#save split_names to outfolder
-		jname = self.directory + "/data_splits.json"
+		jname = self.outfold + "/data_splits.json"
 		jdata = {
 				"train_names": self.train_names,
 				"test_names": self.test_names,
@@ -324,7 +320,7 @@ class Manager:
 		
 		self.sess = sess
 		
-		self.mod = Model(num1 = self.num1 , num2 = self.num2, batch_size = self.batch_size)
+		self.mod = Model(num1 = self.num1 , num2 = self.num2)
 		#summary
 		self.train_writer = tf.summary.FileWriter(self.outfold + "/logs/train/", self.sess.graph)
 		self.test_writer = tf.summary.FileWriter(self.outfold + "/logs/test/")
@@ -372,13 +368,21 @@ class Manager:
 	def start_train(self, epochs=20):
 
 		#Training
-		# ~ plt.ion()
+		# ~ plt.ion()		
 		
 		for epoch in range(epochs):
 			epoch_cost = 0.0
 			epoch_accu = 0.0	
 			for batch_num in range(self.total_minibatches):
 				x_train_batch = self.get_batch(self.train_names, batch_num)
+				
+				tmpX = self.sess.run(self.mod.X, feed_dict={self.mod.X: x_train_batch} )
+				tmpY = self.sess.run(self.mod.Y, feed_dict={self.mod.X: x_train_batch} )
+				
+				# ~ print("\n## X: ", tmpX.min(), tmpX.max())
+				# ~ print("\n## Y: ", tmpY.min(), tmpY.max() )
+				# ~ input("Waity")
+				
 				train_summary, train_loss, train_accuracy = self.mod.train(self.sess, x_train_batch)
 				
 				epoch_cost = epoch_cost + train_loss/self.total_minibatches
@@ -397,7 +401,7 @@ class Manager:
 			self.train_writer.add_summary(train_summary, epoch)
 			self.test_writer.add_summary(dev_summary, epoch)	
 			
-			print("At epoch {}, training cost: {} & Train Accuracy: {}".format(epoch, epoch_cost, epoch_accu) )
+			print("\n\nAt epoch {}, training cost: {} & Train Accuracy: {}".format(epoch, epoch_cost, epoch_accu) )
 			print("\t testing cost: {} & Test Accuracy: {}".format(epoch_cost_dev, epoch_accu_dev) )
 		
 		# ~ plt.legend()
@@ -431,7 +435,7 @@ if __name__ == "__main__":
 	directory = "/home/ai-nano/Documents/McMaster_box/test/test_resize_read/"
 	fmt = "png"
 	outfold = "/home/ai-nano/Documents/McMaster_box/test/test_resize_read_OUT1/"
-	batch_size = 4
+	batch_size = 2
 	shuffle = True
 	num1 = 512
 	num2 = 512
