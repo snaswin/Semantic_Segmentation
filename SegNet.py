@@ -214,7 +214,9 @@ class Model:
 
 		########
 		self.logits = A11
-		#tf.summary.histogram('logits', self.logits)
+		tf.summary.histogram('logits', self.logits)
+		display_image(self.logits, name="logits")
+		
 		
 		#============#
 		print("A1 : ", A1.shape)
@@ -242,13 +244,13 @@ class Model:
 		print("Labels: ", self.Y.shape)
 		
 		self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.Y , logits= self.logits)
-		self.loss = tf.reduce_sum(self.loss)
-		tf.summary.scalar("loss", self.loss)
+		#self.loss = tf.reduce_sum(self.loss)
+		tf.summary.scalar("loss", tf.reduce_sum(self.loss) )
 		
 		self.accuracy = compute_accuracy(self.logits, self.Y)
 		tf.summary.scalar("accuracy", self.accuracy)
 
-		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-1).minimize(self.loss)
+		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-3).minimize(self.loss)
 		self.var_init = tf.global_variables_initializer()
 		
 		self.merged = tf.summary.merge_all()
@@ -433,10 +435,11 @@ class Manager:
 		
 if __name__ == "__main__":
 	
-	directory = "/home/ai-nano/Documents/McMaster_box/test/test_resize_read/"
+	#directory = "/home/ai-nano/Documents/McMaster_box/test/test_resize_read/"
+	directory = "/home/aswin-rpi/Documents/GITs/test_resize/"
 	fmt = "png"
-	outfold = "/home/ai-nano/Documents/McMaster_box/test/test_resize_read_OUT1/"
-	batch_size = 2
+	outfold = "/home/aswin-rpi/Documents/GITs/test_resize_OUT/"
+	batch_size = 4
 	shuffle = True
 	num1 = 512
 	num2 = 512
