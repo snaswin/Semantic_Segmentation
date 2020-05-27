@@ -277,7 +277,7 @@ class Model:
 		self.accuracy = compute_accuracy(self.logits, self.Y)
 		tf.summary.scalar("accuracy", self.accuracy)
 
-		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-3).minimize(self.loss)
+		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-2).minimize(self.loss)
 		self.var_init = tf.global_variables_initializer()
 		
 		self.merged = tf.summary.merge_all()
@@ -308,7 +308,7 @@ def read_image(fname):
 	return cv2.imread(fname, 0)
 
 class Manager:
-	def __init__(self, sess, directory= "./dataset/", fmt="png", outfold="./out1/", batch_size= 64, shuffle=True, num1=512,num2=512):
+	def __init__(self, sess, directory= "./dataset/", fmt="png", outfold="./out1/", batch_size= 64, shuffle=True, fetch_size= 5000, num1=512,num2=512):
 		self.directory = directory
 		self.fnames = glob.glob(self.directory + "/*."+ fmt)
 		self.outfold = outfold
@@ -323,12 +323,21 @@ class Manager:
 		self.len = len(self.fnames)
 		self.inds = np.arange(self.len)
 		print("inds -", self.inds)
-		
+		orig_len = deepcopy(self.len)
+
 		if shuffle ==True:
+			np.random.seed(4)
 			np.random.shuffle(self.inds)
 			tmp = []
+			fcount = 0
 			for i in self.inds:
 				tmp.append( self.fnames[i] )
+				#to filter excess dataset
+				fcount = fcount+1
+				if fcount == fetch_size:
+					self.len = fetch_size
+					break
+					
 			self.fnames = deepcopy(tmp)
 		
 		#split_names
@@ -337,6 +346,9 @@ class Manager:
 		#save split_names to outfolder
 		jname = self.outfold + "/data_splits.json"
 		jdata = {
+				"Orig_len": orig_len,
+				"fetch_size": fetch_size,
+				"fnames_len": self.len,
 				"train_names": self.train_names,
 				"test_names": self.test_names,
 				"dev_names": self.dev_names,
@@ -468,18 +480,19 @@ class Manager:
 if __name__ == "__main__":
 	
 	#directory = "/home/ai-nano/Documents/McMaster_box/test/test_resize_read/"
-	# ~ directory = "/home/aswin-rpi/Documents/GITs/test_resize/"
-	# ~ outfold = "/home/aswin-rpi/Documents/GITs/test_resize_OUT_2/"
+	directory = "/home/aswin-rpi/Documents/GITs/test_resize/"
+	outfold = "/home/aswin-rpi/Documents/GITs/test_resize_OUT_3/"
 	
-	directory = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize/"
-	outfold = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize_Outfold/"
+	# ~ directory = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize/"
+	# ~ outfold = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize_Outfold/"
 	
 	
 	outfold = outfold + "/" + str(len(glob.glob(outfold+"/*") ) ) + "/"
 	
 	fmt = "png"
-	batch_size = 8
+	batch_size = 4
 	shuffle = True
+	fetch_size = 14
 	num1 = 512
 	num2 = 512
 	
@@ -490,7 +503,7 @@ if __name__ == "__main__":
 	pathlib.Path(outfold).mkdir(exist_ok=True, parents=True)
 	
 	with tf.Session(config=allocate() ) as sess:		
-		manager = Manager( sess, directory, fmt, outfold, batch_size, shuffle, num1, num2)
+		manager = Manager( sess, directory, fmt, outfold, batch_size, shuffle, fetch_size, num1, num2)
 		
 		manager.start_train(epochs)
 		
