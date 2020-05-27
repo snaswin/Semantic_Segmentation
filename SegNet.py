@@ -149,9 +149,24 @@ def conv2d_transpose(X, kernel=[3,3,128,1], strides=[1,2,2,1], name="Upsample_1"
 ########################################################################
 ##	Build a CNN architecture
 ########################################################################
+def IoU(logits, labels):
+	#logits - [m, num1, num2, 1] & represents prob of class 1
+	with tf.variable_scope("IoU"):			
+		logits = tf.reshape(logits, [-1])	#flattens t
+		labels = tf.reshape(labels, [-1])
+		
+		inter = tf.reduce_sum( tf.multiply(logits, labels) )
+		union = tf.subtract(tf.add(logits, labels), tf.multiply(logits, labels) )	#A+B-AB
+		union = tf.reduce_sum( union ) 
+		
+		iou = tf.div(inter, union)
+	# but when using it as loss USE: 1 - IoU
+	return iou
+
 
 def compute_accuracy(Zout, Y):
-	logits = tf.cast(Zout, tf.float64)
+	#logits = tf.cast(Zout, tf.float64)
+	logits = Zout
 	labels = Y
 	with tf.variable_scope("Accuracy"):
 		# ~ correct = tf.equal(tf.argmax(logits, 1) , tf.argmax(labels, 1) )
@@ -171,6 +186,7 @@ class Model:
 		
 		#create placeholders
 		self.X = tf.placeholder(tf.float64, [None, num1, num2, 1], name="X")
+		self.X = self.X/255.0
 
 		print("Model shape- ",self.X.shape)		
 		display_image(self.X, name="X")
@@ -211,11 +227,17 @@ class Model:
 		
 		#Decode6
 		A11 = conv2d_transpose(A10, kernel=[3,3,1,4], strides=[1,2,2,1], name="ConvTrans_11")
-
+		tf.summary.histogram('A11', A11)
+		display_image(A11, name="A11")
+		
 		########
-		self.logits = A11
+		self.logits = tf.nn.sigmoid( A11, name="logits")
 		tf.summary.histogram('logits', self.logits)
 		display_image(self.logits, name="logits")
+		
+		self.logits_th = tf.cast( tf.math.greater(self.logits, tf.constant(0.5, dtype=tf.float64) ), dtype=tf.float64, name="logits_th")
+		tf.summary.histogram('logits_th', self.logits_th)
+		display_image(self.logits_th, name="logits_th")
 		
 		
 		#============#
@@ -243,9 +265,13 @@ class Model:
 		print("Logits: ", self.logits.shape)
 		print("Labels: ", self.Y.shape)
 		
-		self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.Y , logits= self.logits)
+		#self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.Y , logits= self.logits)
 		#self.loss = tf.reduce_sum(self.loss)
-		tf.summary.scalar("loss", tf.reduce_sum(self.loss) )
+		#tf.summary.scalar("loss", tf.reduce_sum(self.loss) )
+		
+		iou = IoU(self.Y, self.logits)
+		self.loss = tf.subtract( tf.constant(1.0, dtype=tf.float64), iou, name="loss")
+		tf.summary.scalar("IoU loss", self.loss)
 		
 		self.accuracy = compute_accuracy(self.logits, self.Y)
 		tf.summary.scalar("accuracy", self.accuracy)
@@ -324,6 +350,9 @@ class Manager:
 		self.sess = sess
 		
 		self.mod = Model(num1 = self.num1 , num2 = self.num2)
+		
+		self.saver = tf.train.Saver(max_to_keep=100)
+
 		#summary
 		self.train_writer = tf.summary.FileWriter(self.outfold + "/logs/train/", self.sess.graph)
 		self.test_writer = tf.summary.FileWriter(self.outfold + "/logs/test/")
@@ -401,12 +430,15 @@ class Manager:
 			# ~ plt.pause(0.01)
 			
 			# ~ if epoch%2 == 0:				
+			if epoch%2 == 0:
+				self.saver.save(self.sess, self.outfold + '/model/segment', global_step=epoch)
+			
 			self.train_writer.add_summary(train_summary, epoch)
 			self.test_writer.add_summary(dev_summary, epoch)	
 			
 			print("\n\nAt epoch {}, training cost: {} & Train Accuracy: {}".format(epoch, epoch_cost, epoch_accu) )
 			print("\t testing cost: {} & Test Accuracy: {}".format(epoch_cost_dev, epoch_accu_dev) )
-		
+			
 		# ~ plt.legend()
 		# ~ plt.show()
 		
@@ -414,9 +446,8 @@ class Manager:
 		epoch_cost_test, epoch_accu_test, _ = self.mod.test(self.sess, x_test_batch)
 		print("Test Performance: Cost= {} & Accu= {} ".format(epoch_cost_test, epoch_accu_test) )
 		
-		input("Save?")
-
-		tf.saved_model.simple_save(self.sess, self.outfold + "/model/", inputs={"X":self.mod.X, "train_flag":self.mod.train_flag}, outputs={"predict":self.mod.logits, "accuracy": self.mod.accuracy})
+		#input("Save?")
+		#tf.saved_model.simple_save(self.sess, self.outfold + "/model/", inputs={"X":self.mod.X, "train_flag":self.mod.train_flag}, outputs={"predict":self.mod.logits, "accuracy": self.mod.accuracy})
 		
 		
 		perf_log = {
@@ -436,10 +467,17 @@ class Manager:
 if __name__ == "__main__":
 	
 	#directory = "/home/ai-nano/Documents/McMaster_box/test/test_resize_read/"
-	directory = "/home/aswin-rpi/Documents/GITs/test_resize/"
+	# ~ directory = "/home/aswin-rpi/Documents/GITs/test_resize/"
+	# ~ outfold = "/home/aswin-rpi/Documents/GITs/test_resize_OUT_2/"
+	
+	directory = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize/"
+	outfold = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize_Outfold/"
+	
+	
+	outfold = outfold + "/" + str(len(glob.glob(outfold+"/*") ) ) + "/"
+	
 	fmt = "png"
-	outfold = "/home/aswin-rpi/Documents/GITs/test_resize_OUT_2/"
-	batch_size = 4
+	batch_size = 8
 	shuffle = True
 	num1 = 512
 	num2 = 512
