@@ -420,11 +420,11 @@ class Manager:
 		
 		
 		perf_log = {
-					"epoch_cost": float(epoch_cost),
+					"epoch_cost": float(np.sum(epoch_cost)),
 					"epoch_accu": float(epoch_accu),
-					"epoch_cost_dev": float(epoch_cost_dev),
+					"epoch_cost_dev": float(np.sum(epoch_cost_dev) ),
 					"epoch_accu_dev": float(epoch_accu_dev),
-					"epoch_cost_test": float(epoch_cost_test),
+					"epoch_cost_test": float( np.sum(epoch_cost_test) ),
 					"epoch_accu_test": float(epoch_accu_test)
 					}
 		
@@ -438,13 +438,13 @@ if __name__ == "__main__":
 	#directory = "/home/ai-nano/Documents/McMaster_box/test/test_resize_read/"
 	directory = "/home/aswin-rpi/Documents/GITs/test_resize/"
 	fmt = "png"
-	outfold = "/home/aswin-rpi/Documents/GITs/test_resize_OUT/"
+	outfold = "/home/aswin-rpi/Documents/GITs/test_resize_OUT_2/"
 	batch_size = 4
 	shuffle = True
 	num1 = 512
 	num2 = 512
 	
-	epochs = 100
+	epochs = 2
 	
 	
 	pathlib.Path(directory).mkdir(exist_ok=True, parents=True)
