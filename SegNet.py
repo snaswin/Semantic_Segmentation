@@ -201,33 +201,33 @@ class Model:
 		#	Conv 1 layer + BN + ReLU layer
 		#-----------------------------------------------------------------------
 		
-		A1 = Conv_BN_Act_block(self.X, kernel=[3,3,1,128], strides=[1,2,2,1], name="ConvBA_1", train_flag= self.train_flag)
-		display_activation_sep(A1, name="A1", filters= 128)
+		A1 = Conv_BN_Act_block(self.X, kernel=[3,3,1,32], strides=[1,2,2,1], name="ConvBA_1", train_flag= self.train_flag)
+		display_activation_sep(A1, name="A1", filters= 32)
 		#tf.summary.histogram('ConvBA_1', A1)
 		
 		A2 = max_pool2d(A1, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_2")
 		
 		#Encode2
-		A3 = Conv_BN_Act_block(A2, kernel=[3,3,128,64], strides=[1,2,2,1], name="ConvBA_3", train_flag= self.train_flag)		
+		A3 = Conv_BN_Act_block(A2, kernel=[3,3,32,16], strides=[1,2,2,1], name="ConvBA_3", train_flag= self.train_flag)		
 		A4 = max_pool2d(A3, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_4")
 		
 		# ~ display_activation(A2_conv, name="A2_conv", reshape_height = 4, resize_scale = 5)
 		#display_activation_sep(A2_conv, name="A2_conv", filters= 2)		
 
 		#Encode3
-		A5 = Conv_BN_Act_block(A4, kernel=[3,3,64,32], strides=[1,2,2,1], name="ConvBA_5", train_flag= self.train_flag)
+		A5 = Conv_BN_Act_block(A4, kernel=[3,3,16,8], strides=[1,2,2,1], name="ConvBA_5", train_flag= self.train_flag)
 		A6 = max_pool2d(A5, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_6")
 		
 		#Decode4
-		A7 = conv2d_transpose(A6, kernel=[3,3,16,32], strides=[1,2,2,1], name="ConvTrans_7")
-		A8 = Conv_BN_Act_block(A7, kernel=[3,3,16,16], strides=[1,2,2,1], name="ConvBA_8", train_flag= self.train_flag)
+		A7 = conv2d_transpose(A6, kernel=[3,3,8,8], strides=[1,2,2,1], name="ConvTrans_7")
+		A8 = Conv_BN_Act_block(A7, kernel=[3,3,8,4], strides=[1,2,2,1], name="ConvBA_8", train_flag= self.train_flag)
 		
 		#Decode5
-		A9 = conv2d_transpose(A8, kernel=[3,3,8,16], strides=[1,2,2,1], name="ConvTrans_9")
-		A10 = Conv_BN_Act_block(A9, kernel=[3,3,8,4], strides=[1,2,2,1], name="ConvBA_10", train_flag= self.train_flag)
+		A9 = conv2d_transpose(A8, kernel=[3,3,4,4], strides=[1,2,2,1], name="ConvTrans_9")
+		A10 = Conv_BN_Act_block(A9, kernel=[3,3,4,2], strides=[1,2,2,1], name="ConvBA_10", train_flag= self.train_flag)
 		
 		#Decode6
-		A11 = conv2d_transpose(A10, kernel=[3,3,1,4], strides=[1,2,2,1], name="ConvTrans_11")
+		A11 = conv2d_transpose(A10, kernel=[3,3,1,2], strides=[1,2,2,1], name="ConvTrans_11")
 		tf.summary.histogram('A11', A11)
 		display_image(A11, name="A11")
 		
@@ -420,7 +420,7 @@ class Manager:
 	def start_train(self, epochs=20):
 
 		#Training
-		# ~ plt.ion()		
+		plt.ion()		
 		
 		for epoch in tqdm(range(epochs)):
 			epoch_cost = 0.0
@@ -457,9 +457,9 @@ class Manager:
 				if batch_num%5 == 0:						
 					self.test_writer.add_summary(dev_summary, epoch)	
 			
-			# ~ plt.scatter(epoch, epoch_accu, c='r', label="train")
-			# ~ plt.scatter(epoch, epoch_accu_dev, c='b', label="dev")
-			# ~ plt.pause(0.01)
+			plt.scatter(epoch, epoch_accu, c='r', label="train")
+			plt.scatter(epoch, epoch_accu_dev, c='b', label="dev")
+			plt.pause(0.01)
 			
 			# ~ if epoch%2 == 0:				
 			#if epoch%2 == 0:
@@ -469,8 +469,8 @@ class Manager:
 			print("\n\nAt epoch {}, training cost: {} & Train Accuracy: {}".format(epoch, epoch_cost, epoch_accu) )
 			print("\t testing cost: {} & Test Accuracy: {}".format(epoch_cost_dev, epoch_accu_dev) )
 			
-		# ~ plt.legend()
-		# ~ plt.show()
+		plt.legend()
+		plt.show()
 		
 		# ~ x_test_batch = self.read_x_batch_names(self.test_names)
 		# ~ epoch_cost_test, epoch_accu_test, _ = self.mod.test(self.sess, x_test_batch)
@@ -515,17 +515,16 @@ if __name__ == "__main__":
 	directory = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize/"
 	outfold = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize_Outfold/"
 	
-	
 	outfold = outfold + "/" + str(len(glob.glob(outfold+"/*") ) ) + "/"
 	
 	fmt = "png"
-	batch_size = 32
+	batch_size = 128
 	shuffle = True
-	fetch_size = 500
+	fetch_size = 5000
 	num1 = 512
 	num2 = 512
 	
-	epochs = 2
+	epochs = 100
 	
 	
 	print("\n#### OUTFOLD is ", outfold)
