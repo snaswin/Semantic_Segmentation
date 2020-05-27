@@ -1,114 +1,70 @@
 import numpy as np
 import tensorflow as tf
 import pathlib
-import math
-import pickle
+import os
+import cv2
+import matplotlib.pyplot as plt
 
 
-class Predict_Manager:
-	def __init__(self, data_pkl, mod_dir= "./folder/", gram_size=24, feature_size=7):
-		with open(data_pkl, 'rb') as infile:
-			self.data = pickle.load(infile)
-		
-		#1) Init data
-		self.data_X = np.array(self.data["X"], dtype=np.float64)
-		self.data_y = np.array(self.data["y"], dtype=np.float64)
-		self.csv_out = self.data["csv_out"]
-		print("In Manager, Xy shapes- ", self.data_X.shape, self.data_y.shape)
-		
-		self.load_model(mod_dir)
+def allocate():
+	config = tf.ConfigProto(log_device_placement=False, device_count = {'GPU': 0})
+	config.gpu_options.allow_growth=True
+	return config
 	
-	def get_x_batch(self, data_x, batch_num):
-		if batch_num <= self.total_minibatches:
-			x_batch = data_x[batch_num*self.batch_size: (batch_num+1)*self.batch_size ]
-		else:
-			print("Batch num overflow")
-			exit(121)				
-		return x_batch
+class Predict_SegNet:
+	def __init__(self, outfold = "./folder/", model_iter=3):
 		
-	def get_xy_batch(self, X,y,batch_num):
-		batch_x = self.get_x_batch(X, batch_num)
-		batch_y = self.get_x_batch(y, batch_num)
-		return batch_x, batch_y
-
-	def load_model(self, model_dir, only_predict=False):
 		tf.reset_default_graph()
-					
-		graph1 = tf.Graph()
-		with graph1.as_default():		
-			self.sess = tf.Session(graph=graph1)
+		ckpt = tf.train.get_checkpoint_state(os.path.dirname(outfold + '/model/checkpoint') )
 		
-			print("##=============================================================##")
-			print("Restoring...")
-			
-			#saved_model API- use the standard tag
-			tf.saved_model.loader.load(self.sess, [tf.saved_model.tag_constants.SERVING], model_dir)
-			
-			self.xs = graph1.get_tensor_by_name("Model/X:0")
-			#self.ys = graph1.get_tensor_by_name("Y:0")
-			self.keep_prob = graph1.get_tensor_by_name("Model/keep_prob:0")
-			self.th = graph1.get_tensor_by_name("Model/th:0")
-			
-			self.pred = graph1.get_tensor_by_name("Model/predict:0")
-			
+		#prep
+		ckpt_raw = ckpt.model_checkpoint_path.strip().split("-")[:-1]
+		ckpt_raw = "-".join(ckpt_raw)
+		ckpt_raw = ckpt_raw + "-" + str(model_iter)
+		#meta	
+		ckpt_raw_meta = ckpt_raw + ".meta"
+		imported_meta = tf.train.import_meta_graph(ckpt_raw_meta)
 		
-			if only_predict == False:
-				self.accuracy = graph1.get_tensor_by_name("Model/Accuracy/Mean:0")
-				self.ys = graph1.get_tensor_by_name("Model/Y:0")
-				
 
-			
-	def predict(self, x_batch, y_batch = None, only_predict=False, param = 0.03):
-		if only_predict == True:
-			out = self.sess.run(self.pred, feed_dict={self.xs: x_batch, self.keep_prob: 1.0, self.th:param} )
-			return out
-		else:
-			y_batch = np.array(y_batch).reshape(-1,1)
-			
-			out, accu = self.sess.run([self.pred, self.accuracy], feed_dict={self.xs: x_batch, self.ys: y_batch, self.keep_prob: 1.0, self.th:param} )
-			return (out, accu)
+		self.sess = tf.Session()
+		imported_meta.restore(self.sess, ckpt_raw)			
+		graph = tf.get_default_graph()
+		
+		# ~ for op in graph.get_operations():
+			# ~ print( op.name )
+		# ~ input()
+		self.X = graph.get_tensor_by_name('Model/X:0')
+		self.Y = graph.get_tensor_by_name('Model/Y:0')
+		self.logits = graph.get_tensor_by_name('Model/logits:0')
+		self.logits_th = graph.get_tensor_by_name('Model/logits_th:0')
+		self.iou_loss = graph.get_tensor_by_name('Model/loss:0')
+		self.accu = graph.get_tensor_by_name('Model/Accuracy/Mean:0')
+	
+	
+	def predict(self, im_batch):
+		y, logits, logits_th, iou_loss, accu = self.sess.run([self.Y, self.logits, self.logits_th,self.iou_loss, self.accu], feed_dict={self.X:im_batch})
+		return y, logits, logits_th, iou_loss, accu
+		
+	def close(self):
+		self.sess.close()
+		
 	
 if __name__ == "__main__":
 	
-	pkl_name = "/media/aswin/Data/GITs/Kyma/Data/b4_GAF_Xy.pkl"
-	#mod_dir = "/media/aswin/Data/GITs/Kyma/Data/CNN/v2/model/"
-	mod_dir = "/media/aswin/Data/GITs/Kyma/Data/CNN/v3_b4_GAF_Xy/model/"
-	
-	param = 0.15
-	
-	manage = Predict_Manager(pkl_name, mod_dir)
-	
-	out, accu = manage.predict(x_batch = manage.data_X[:50], y_batch = manage.data_y[:50], only_predict=False, param=param)
-	
-	print("##### BAD #####")
-	print("Out: ", out.ravel())
-	print("y: ", manage.data_y.ravel()[:50])
-	print("Accuracy: ", accu )
-	print("Lens ", len(out.ravel()), len(manage.data_y.ravel()[:50]) )
-	
+	#Data- X_batch
+	im = cv2.imread("/home/ai-nano/Documents/McMaster_box/test/test_resize/box_cti=1.85_cpi=2.692_lti=0.401_lpi=1.082_le=300000.png", 0)
+	im = np.array(im).reshape(1,im.shape[0], im.shape[1], 1)
 
-	out, accu = manage.predict(x_batch = manage.data_X[-22:], y_batch = manage.data_y[-22:], only_predict=False, param=param)	
-	print("\n##### GOOD #####")
-	print("Out: ", out.ravel())
-	print("y: ", manage.data_y.ravel()[-22:])
-	print("Accuracy: ", accu)
-	print("Lens ", len(out.ravel()), len(manage.data_y.ravel()[-22:]) )
+	#Model info
+	model_fold = "/home/ai-nano/Documents/McMaster_box/Segmentation/"
+	model_iter = 3
+	manager = Predict_SegNet(model_fold, model_iter)
 
-##############################################################################
-	#Batch 5 prediction
-	# ~ pkl_name = "/media/aswin/Data/GITs/Kyma/Data/b5_GAF_Xy.pkl"
-	# ~ mod_dir = "/media/aswin/Data/GITs/Kyma/Data/CNN/v2/model/"
-	# ~ param = 0.09
-	
-	# ~ manage = Predict_Manager(pkl_name, mod_dir)
-	
-	# ~ truth_y = np.ones(len(manage.data_X))
-	# ~ out, accu = manage.predict(x_batch = manage.data_X, y_batch = truth_y, only_predict=False, param=param)
-	
-	# ~ print("####### B5 ############")
-	# ~ print("Out: ", out.ravel())
-	# ~ print("y: ", truth_y)
-	# ~ print("Accuracy: ", accu )
-	# ~ print("Lens ", len(out.ravel()), len(truth_y) )
-	
+	#Run
+	y, logits, logits_th, iou_loss, accu = manager.predict(im)
+	print(y.shape)
+	print(logits.shape)
+	print(logits_th.shape)
+	print(iou_loss)
+	print(accu)
 	
