@@ -300,7 +300,7 @@ def write_js(data, fname="./data_pairs.json"):
 		json.dump(fp=outfile, obj=data, indent=4)
 
 def allocate():
-	config = tf.ConfigProto(log_device_placement=True))
+	config = tf.ConfigProto(log_device_placement=True)
 	config.gpu_options.allow_growth=True
 	return config
 
