@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 np.random.seed(4)
 from copy import deepcopy
 import cv2
+from tqdm import tqdm 
 
 #parameter utils
 def weight(name, shape):
@@ -299,7 +300,7 @@ def write_js(data, fname="./data_pairs.json"):
 		json.dump(fp=outfile, obj=data, indent=4)
 
 def allocate():
-	config = tf.ConfigProto()
+	config = tf.ConfigProto(log_device_placement=True))
 	config.gpu_options.allow_growth=True
 	return config
 
@@ -402,10 +403,10 @@ class Manager:
 		#Training
 		# ~ plt.ion()		
 		
-		for epoch in range(epochs):
+		for epoch in tqdm(range(epochs)):
 			epoch_cost = 0.0
 			epoch_accu = 0.0	
-			for batch_num in range(self.total_minibatches):
+			for batch_num in tqdm(range(self.total_minibatches)):
 				x_train_batch = self.get_batch(self.train_names, batch_num)
 				
 				# ~ tmpX = self.sess.run(self.mod.X, feed_dict={self.mod.X: x_train_batch} )
@@ -430,8 +431,8 @@ class Manager:
 			# ~ plt.pause(0.01)
 			
 			# ~ if epoch%2 == 0:				
-			if epoch%2 == 0:
-				self.saver.save(self.sess, self.outfold + '/model/segment', global_step=epoch)
+			#if epoch%2 == 0:
+			self.saver.save(self.sess, self.outfold + '/model/segment', global_step=epoch)
 			
 			self.train_writer.add_summary(train_summary, epoch)
 			self.test_writer.add_summary(dev_summary, epoch)	
