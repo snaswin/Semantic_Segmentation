@@ -277,7 +277,7 @@ class Model:
 		self.accuracy = compute_accuracy(self.logits, self.Y)
 		tf.summary.scalar("accuracy", self.accuracy)
 
-		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-2).minimize(self.loss)
+		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-3).minimize(self.loss)
 		self.var_init = tf.global_variables_initializer()
 		
 		self.merged = tf.summary.merge_all()
@@ -455,10 +455,11 @@ class Manager:
 				epoch_accu_dev = epoch_accu_dev + accu_dev/self.total_minibatches_dev
 				
 				if batch_num%5 == 0:						
-					self.test_writer.add_summary(dev_summary, epoch)	
-			
+					self.test_writer.add_summary(dev_summary, epoch)
+
 			plt.scatter(epoch, epoch_accu, c='r', label="train")
 			plt.scatter(epoch, epoch_accu_dev, c='b', label="dev")
+			plt.savefig(self.outfold + "/calculated_accu.png")
 			plt.pause(0.01)
 			
 			# ~ if epoch%2 == 0:				
@@ -513,7 +514,7 @@ if __name__ == "__main__":
 	# ~ outfold = "/home/aswin-rpi/Documents/GITs/test_resize_OUT_3/"
 	
 	directory = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize/"
-	outfold = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize_Outfold/"
+	outfold = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize_Outfold/Expt2/"
 	
 	outfold = outfold + "/" + str(len(glob.glob(outfold+"/*") ) ) + "/"
 	

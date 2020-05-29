@@ -59,6 +59,7 @@ class Predict_SegNet:
 	def random_sample_imfiles(self,imfold="./folder/*.png", size=5):
 		fnames = glob.glob(imfold)
 		l = len(fnames)
+		print("Len of imfold: ", l)
 		inds = np.random.randint(0, l, size)
 		fnames = np.take(fnames, inds)
 		
@@ -182,15 +183,15 @@ if __name__ == "__main__":
 	# ~ im = np.array(im).reshape(1,im.shape[0], im.shape[1], 1)
 
 	## Model info
-	model_fold = "/home/ai-nano/Documents/McMaster_box/Segmentation/"
+	model_fold = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize_Outfold/Expt1/11/"
 	model_iter = 3
 	manager = Predict_SegNet(model_fold, model_iter)
 
 	
 	## Visualize_args
-	imfold = "/home/ai-nano/Documents/McMaster_box/test/test_resize_read/*.png"
-	size = 5
-	outfold = "/home/ai-nano/Documents/McMaster_box/test/test_resize_read_Predict_Visualize/"
+	imfold = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize/*.png"
+	size = 200
+	outfold = model_fold + "/visualize/model-" + str(model_iter) + "/"
 
 	#RUN Visualization
 	visualizer(manager, imfold, size, outfold)
