@@ -183,14 +183,14 @@ if __name__ == "__main__":
 	# ~ im = np.array(im).reshape(1,im.shape[0], im.shape[1], 1)
 
 	## Model info
-	model_fold = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize_Outfold/Expt1/11/"
-	model_iter = 3
+	model_fold = "/media/aswin/336163b5-742f-40f5-9e55-c18e519d29f3/McMaster_box/box/raw_X_resize_Outfold/10/"
+	model_iter = 99
 	manager = Predict_SegNet(model_fold, model_iter)
 
 	
 	## Visualize_args
-	imfold = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize/*.png"
-	size = 200
+	imfold = "/media/aswin/336163b5-742f-40f5-9e55-c18e519d29f3/McMaster_box/box/raw_X_resize/*.png"
+	size = 150
 	outfold = model_fold + "/visualize/model-" + str(model_iter) + "/"
 
 	#RUN Visualization
