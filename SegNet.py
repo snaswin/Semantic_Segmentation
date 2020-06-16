@@ -178,12 +178,12 @@ def compute_accuracy(Zout, Y):
 
 #model graph
 class Model:
-	def __init__(self, num1 = 28, num2 = 28):
+	def __init__(self, num1 = 28, num2 = 28, nclass=3):
 		
 		with tf.variable_scope("Model"):
-			self.define_model(num1, num2)
+			self.define_model(num1, num2, nclass)
 					
-	def define_model(self,num1, num2):
+	def define_model(self,num1, num2, nclass):
 		
 		#create placeholders
 		self.X = tf.placeholder(tf.float64, [None, num1, num2, 1], name="X")
@@ -192,7 +192,7 @@ class Model:
 		print("Model shape- ",self.X.shape)		
 		display_image(self.X, name="X")
 		
-		self.Y = tf.stop_gradient( tf.cast( tf.math.greater(self.X, tf.constant(0.0, dtype=tf.float64) ), dtype=tf.float64), name="Y" )
+		self.Y = tf.placeholder(tf.float64, [None, num1, num2, nclass], name="Y")
 		display_image(self.Y, name="Y")
 		
 		self.train_flag = tf.placeholder(tf.bool, name="train_flag")
@@ -282,12 +282,12 @@ class Model:
 		
 		self.merged = tf.summary.merge_all()
 		
-	def test(self, sess, x_batch):
-		 test_loss, test_accu, test_summary, logits = sess.run([self.loss, self.accuracy, self.merged, self.logits], feed_dict={self.X: x_batch, self.train_flag: False} )
+	def test(self, sess, x_batch, y_batch):
+		 test_loss, test_accu, test_summary, logits = sess.run([self.loss, self.accuracy, self.merged, self.logits], feed_dict={self.X: x_batch, self.Y: y_batch, self.train_flag: False} )
 		 return test_loss, test_accu, test_summary
 
-	def train(self, sess, x_batch):
-		summary, loss, _, accu, logits = sess.run( [self.merged, self.loss, self.optimizer, self.accuracy, self.logits], feed_dict={self.X: x_batch, self.train_flag: True} )
+	def train(self, sess, x_batch, y_batch):
+		summary, loss, _, accu, logits = sess.run( [self.merged, self.loss, self.optimizer, self.accuracy, self.logits], feed_dict={self.X: x_batch, self.Y: y_batch, self.train_flag: True} )
 		return summary, loss, accu
 	
 def read_js(fname="./data_pairs.json"):
