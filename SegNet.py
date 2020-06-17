@@ -9,7 +9,9 @@ import matplotlib.pyplot as plt
 np.random.seed(4)
 from copy import deepcopy
 import cv2
-from tqdm import tqdm 
+from tqdm import tqdm
+import os
+
 
 #parameter utils
 def weight(name, shape):
@@ -40,8 +42,8 @@ def flatten(x):
 def get_fullshape(x):
 	return tf.cast(x.get_shape(), 'int32' )
 
-def get_shape(x, index):
-	return tf.cast(x.get_shape()[index], 'int32')
+def get_shape(x, index, dtype='int32'):
+	return tf.cast(x.get_shape()[index], dtype)
 	
 #Tensorboard utils:
 def variable_summaries(var, name=""):
@@ -192,7 +194,7 @@ class Model:
 		print("Model shape- ",self.X.shape)		
 		display_image(self.X, name="X")
 		
-		self.Y = tf.placeholder(tf.float64, [None, num1, num2, nclass], name="Y")
+		self.Y = tf.placeholder(tf.float64, [None, num1, num2, 1], name="Y")
 		display_image(self.Y, name="Y")
 		
 		self.train_flag = tf.placeholder(tf.bool, name="train_flag")
@@ -227,20 +229,39 @@ class Model:
 		A10 = Conv_BN_Act_block(A9, kernel=[3,3,4,2], strides=[1,2,2,1], name="ConvBA_10", train_flag= self.train_flag)
 		
 		#Decode6
-		A11 = conv2d_transpose(A10, kernel=[3,3,1,2], strides=[1,2,2,1], name="ConvTrans_11")
+		A11 = conv2d_transpose(A10, kernel=[3,3,nclass,4], strides=[1,2,2,1], name="ConvTrans_11")
 		tf.summary.histogram('A11', A11)
 		display_image(A11, name="A11")
 		
 		########
-		self.logits = tf.nn.sigmoid( A11, name="logits")
+		# ~ self.logits = tf.nn.sigmoid( A11, name="logits")
+		self.logits = tf.argmax( tf.nn.softmax(A11), axis= 3)
+		self.logits = tf.cast(self.logits, dtype=tf.float64)
+		self.logits = tf.expand_dims(self.logits, axis=3, name="logits")
+		
+		print("Logits : ", self.logits.shape)
+		print("Logits : ", self.logits.dtype)
+		
+
 		tf.summary.histogram('logits', self.logits)
-		display_image(self.logits, name="logits")
+		#display_image(self.logits, name="logits")
 		
-		self.logits_th = tf.cast( tf.math.greater(self.logits, tf.constant(0.5, dtype=tf.float64) ), dtype=tf.float64, name="logits_th")
-		tf.summary.histogram('logits_th', self.logits_th)
-		display_image(self.logits_th, name="logits_th")
+		#Project predictions
+		self.logits_c1 = tf.cast( tf.math.equal(self.logits, tf.constant(1.0, dtype=tf.float64) ), dtype=tf.float64, name="logits_c1")
+		display_image(self.logits_c1, name="logits_c1")
+		self.logits_c2 = tf.cast( tf.math.equal(self.logits, tf.constant(2.0, dtype=tf.float64) ), dtype=tf.float64, name="logits_c2")
+		display_image(self.logits_c2, name="logits_c2")
+		self.logits_c3 = tf.cast( tf.math.equal(self.logits, tf.constant(3.0, dtype=tf.float64) ), dtype=tf.float64, name="logits_c3")
+		display_image(self.logits_c3, name="logits_c3")
 		
-		
+		#Project labels
+		self.Y_c1 = tf.cast( tf.math.equal(self.Y, tf.constant(1.0, dtype=tf.float64) ), dtype=tf.float64, name="Y_c1")
+		display_image(self.Y_c1, name="Y_c1")
+		self.Y_c2 = tf.cast( tf.math.equal(self.Y, tf.constant(2.0, dtype=tf.float64) ), dtype=tf.float64, name="Y_c2")
+		display_image(self.Y_c2, name="Y_c2")
+		self.Y_c3 = tf.cast( tf.math.equal(self.Y, tf.constant(3.0, dtype=tf.float64) ), dtype=tf.float64, name="Y_c3")
+		display_image(self.Y_c3, name="Y_c3")
+			
 		#============#
 		print("A1 : ", A1.shape)
 		print("A2 : ", A2.shape)
@@ -253,7 +274,7 @@ class Model:
 		print("A9 : ", A9.shape)
 		print("A10 : ", A10.shape)
 		print("A11 : ", A11.shape)
-		
+		print("Logits : ", self.logits.shape)
 		#============#
 		
 		# ~ self.predict = tf.to_int32( self.logits > self.th, name = "predict")
@@ -265,17 +286,40 @@ class Model:
 		
 		print("Logits: ", self.logits.shape)
 		print("Labels: ", self.Y.shape)
+				
+		# ~ iou = IoU(self.Y, self.logits)
+		# ~ self.loss = tf.subtract( tf.constant(1.0, dtype=tf.float64), iou, name="loss")
+		# ~ tf.summary.scalar("IoU loss", self.loss)
 		
-		#self.loss = tf.nn.sigmoid_cross_entropy_with_logits(labels=self.Y , logits= self.logits)
-		#self.loss = tf.reduce_sum(self.loss)
-		#tf.summary.scalar("loss", tf.reduce_sum(self.loss) )
+		# ~ self.accuracy = compute_accuracy(self.logits, self.Y)
+		# ~ tf.summary.scalar("accuracy", self.accuracy)
 		
-		iou = IoU(self.Y, self.logits)
-		self.loss = tf.subtract( tf.constant(1.0, dtype=tf.float64), iou, name="loss")
-		tf.summary.scalar("IoU loss", self.loss)
+		##################################################################
+		#Loss
+		iou_c1 = IoU(self.Y_c1, self.logits_c1)
+		iou_c2 = IoU(self.Y_c2, self.logits_c2)
+		iou_c3 = IoU(self.Y_c3, self.logits_c3)
+		iou = iou_c1 + iou_c2 + iou_c3
 		
-		self.accuracy = compute_accuracy(self.logits, self.Y)
+		tf.summary.scalar("IoU C1", iou_c1)
+		tf.summary.scalar("IoU C2", iou_c2)
+		tf.summary.scalar("IoU C3", iou_c3)
+
+
+		self.loss = tf.subtract( tf.constant(3.0, dtype=tf.float64), iou, name="loss")
+		tf.summary.scalar("IoU loss", self.loss)	
+		
+		#Accuracy
+		self.accuracy_c1 = compute_accuracy(self.logits_c1, self.Y_c1)
+		tf.summary.scalar("accuracy_c1", self.accuracy_c1)
+		self.accuracy_c2 = compute_accuracy(self.logits_c2, self.Y_c2)
+		tf.summary.scalar("accuracy_c2", self.accuracy_c2)
+		self.accuracy_c3 = compute_accuracy(self.logits_c3, self.Y_c3)
+		tf.summary.scalar("accuracy_c3", self.accuracy_c3)
+		
+		self.accuracy = (self.accuracy_c1 + self.accuracy_c2 + self.accuracy_c3)/3.0
 		tf.summary.scalar("accuracy", self.accuracy)
+		
 
 		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-3).minimize(self.loss)
 		self.var_init = tf.global_variables_initializer()
@@ -300,7 +344,7 @@ def write_js(data, fname="./data_pairs.json"):
 		json.dump(fp=outfile, obj=data, indent=4)
 
 def allocate():
-	config = tf.ConfigProto(log_device_placement=True, device_count = {'GPU': 0})
+	config = tf.ConfigProto(log_device_placement=False, device_count = {'GPU': 0})
 	config.gpu_options.allow_growth=True
 	return config
 
@@ -308,14 +352,30 @@ def read_image(fname):
 	return cv2.imread(fname, 0)
 
 class Manager:
-	def __init__(self, sess, directory= "./dataset/", fmt="png", outfold="./out1/", batch_size= 64, shuffle=True, fetch_size= 5000, num1=512,num2=512):
+	def __init__(self, sess, directory= "./dataset/", fmt="png", outfold="./out1/", batch_size= 64, shuffle=True, fetch_size= 5000, num1=512, num2=512, nclass=3):
 		self.directory = directory
-		self.fnames = glob.glob(self.directory + "/*."+ fmt)
+		
+		self.Xdirectory = self.directory + "/X/"
+		self.Ydirectory = self.directory + "/Y/"
+		
+		#X only
+		self.fnames = os.listdir(self.Xdirectory)
+		
+		#Filter images that aint the fmt
+		j = 0
+		while j < len(self.fnames):
+			fname = self.fnames[j]
+			if fname.endswith("."+fmt):
+				j = j+1
+			else:
+				self.fnames.pop(j)
+		
 		self.outfold = outfold
 		
 		#params
 		self.num1 = num1
 		self.num2 = num2
+		self.nclass = nclass
 		self.batch_size = batch_size
 		self.ratio = [0.8, 0.1, 0.1]
 		
@@ -348,13 +408,14 @@ class Manager:
 		jdata = {
 				"Orig_len": orig_len,
 				"fetch_size": fetch_size,
+				"Xdirectory": self.Xdirectory,
+				"Ydirectory": self.Ydirectory,
 				"fnames_len": self.len,
 				"train_names": self.train_names,
 				"test_names": self.test_names,
 				"dev_names": self.dev_names,
 				}
 		write_js(jdata, jname)
-		
 		
 		m = len(self.train_names)
 		self.total_minibatches = math.ceil(m/self.batch_size)
@@ -369,7 +430,7 @@ class Manager:
 		
 		self.sess = sess
 		
-		self.mod = Model(num1 = self.num1 , num2 = self.num2)
+		self.mod = Model(num1 = self.num1 , num2 = self.num2, nclass= self.nclass)
 		
 		self.saver = tf.train.Saver(max_to_keep=100)
 
@@ -401,20 +462,21 @@ class Manager:
 		return x_batch_names
 	
 	#read images
-	def read_x_batch_names(self, x_batch_names):
-		out = []
+	def read_xy_batch_names(self, x_batch_names):
+		outX = []
+		outY = []
 		for name in x_batch_names:
-			out.append(cv2.imread(name,0).reshape(self.num1, self.num2, 1) )
-		return np.array(out)
+			outX.append(cv2.imread(self.Xdirectory+ "/" + name,0).reshape(self.num1, self.num2, 1) )
+			outY.append(cv2.imread(self.Ydirectory+ "/" + name,0).reshape(self.num1, self.num2, 1) )
+		return np.array(outX), np.array(outY)
 	
 	#Use during training: uses the above two functions- get & read x_batch_names
 	def get_batch(self, train_names, batch_num):
 		#1
 		x_batch_names = self.get_x_batch_names(train_names, batch_num)
 		#2
-		x_batch = self.read_x_batch_names(x_batch_names)
-		return x_batch
-	
+		x_batch, y_batch = self.read_xy_batch_names(x_batch_names)
+		return x_batch, y_batch
 	
 	#TRAIN	
 	def start_train(self, epochs=20):
@@ -426,16 +488,9 @@ class Manager:
 			epoch_cost = 0.0
 			epoch_accu = 0.0	
 			for batch_num in tqdm(range(self.total_minibatches)):
-				x_train_batch = self.get_batch(self.train_names, batch_num)
-				
-				# ~ tmpX = self.sess.run(self.mod.X, feed_dict={self.mod.X: x_train_batch} )
-				# ~ tmpY = self.sess.run(self.mod.Y, feed_dict={self.mod.X: x_train_batch} )
-				
-				# ~ print("\n## X: ", tmpX.min(), tmpX.max())
-				# ~ print("\n## Y: ", tmpY.min(), tmpY.max() )
-				# ~ input("Waity")
-				
-				train_summary, train_loss, train_accuracy = self.mod.train(self.sess, x_train_batch)
+				x_train_batch, y_train_batch = self.get_batch(self.train_names, batch_num)
+								
+				train_summary, train_loss, train_accuracy = self.mod.train(self.sess, x_train_batch, y_train_batch)
 				
 				epoch_cost = epoch_cost + train_loss/self.total_minibatches
 				epoch_accu = epoch_accu + train_accuracy/self.total_minibatches
@@ -448,8 +503,8 @@ class Manager:
 			epoch_cost_dev = 0.0
 			epoch_accu_dev = 0.0	
 			for batch_num in tqdm(range(self.total_minibatches_dev)):
-				x_dev_batch = self.get_batch(self.dev_names, batch_num)
-				loss_dev, accu_dev, dev_summary = self.mod.test(self.sess, x_dev_batch)
+				x_dev_batch, y_dev_batch = self.get_batch(self.dev_names, batch_num)
+				loss_dev, accu_dev, dev_summary = self.mod.test(self.sess, x_dev_batch, y_dev_batch)
 				
 				epoch_cost_dev = epoch_cost_dev + loss_dev/self.total_minibatches_dev
 				epoch_accu_dev = epoch_accu_dev + accu_dev/self.total_minibatches_dev
@@ -481,8 +536,8 @@ class Manager:
 		epoch_cost_test = 0.0
 		epoch_accu_test = 0.0	
 		for batch_num in tqdm(range(self.total_minibatches_test)):
-			x_test_batch = self.get_batch(self.test_names, batch_num)
-			loss_test, accu_test, test_summary = self.mod.test(self.sess, x_test_batch)
+			x_test_batch, y_test_batch = self.get_batch(self.test_names, batch_num)
+			loss_test, accu_test, test_summary = self.mod.test(self.sess, x_test_batch, y_test_batch)
 			
 			epoch_cost_test = epoch_cost_test + loss_test/self.total_minibatches_test
 			epoch_accu_test = epoch_accu_test + accu_test/self.total_minibatches_test
@@ -513,19 +568,19 @@ if __name__ == "__main__":
 	# ~ directory = "/home/aswin-rpi/Documents/GITs/test_resize/"
 	# ~ outfold = "/home/aswin-rpi/Documents/GITs/test_resize_OUT_3/"
 	
-	directory = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize/"
-	outfold = "/home/aswin-rpi/Documents/GITs/McMaster/raw_X_resize_Outfold/Expt2/"
+	directory = "/data/McMaster/raw_ready_resize/"
+	outfold = "/data/McMaster/raw_ready_resize_OUT/Expt1/"
 	
 	outfold = outfold + "/" + str(len(glob.glob(outfold+"/*") ) ) + "/"
 	
 	fmt = "png"
-	batch_size = 128
+	batch_size = 256
 	shuffle = True
 	fetch_size = 5000
 	num1 = 512
 	num2 = 512
 	
-	epochs = 100
+	epochs = 5
 	
 	
 	print("\n#### OUTFOLD is ", outfold)
