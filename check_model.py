@@ -40,28 +40,22 @@ class Predict_SegNet:
 		imported_meta.restore(self.sess, ckpt_raw)			
 		graph = tf.get_default_graph()
 		
-		# ~ for op in graph.get_operations():
-			# ~ print( op.name )
-		# ~ input()
+		for i, op in enumerate(graph.get_operations() ):
+			print( op.name )
+			# ~ if i%20 == 0:
+				# ~ input("Proceed?")
+		# ~ input("Checking?")
 		self.X = graph.get_tensor_by_name('Model/X:0')
 		self.Y = graph.get_tensor_by_name('Model/Y:0')
-		self.logits = graph.get_tensor_by_name('Model/predict:0')
+		self.logits = graph.get_tensor_by_name('Model/logits:0')
 		self.logits_c1 = graph.get_tensor_by_name('Model/logits_c1:0')
 		self.iou_loss = graph.get_tensor_by_name('Model/loss:0')
 		self.accu = graph.get_tensor_by_name('Model/Accuracy/Mean:0')
-		
 	
 	#Predict
-	def predict(self, x_batch, y_batch):
-		# ~ y, logits, logits_c1, iou_loss, accu = self.sess.run([self.Y, self.logits, self.logits_c1,self.iou_loss, self.accu], feed_dict={self.X:x_batch, self.Y:y_batch})
-		# ~ return y, logits, logits_c1, iou_loss, accu
-		y, logits, logits_c1, iou_loss = self.sess.run([self.Y, self.logits, self.logits_c1,self.iou_loss], feed_dict={self.X:x_batch, self.Y:y_batch})
-		return y, logits, logits_c1, iou_loss, 0.0
-		#Bug fix- accuracy
-		
-	def predict_real(self, x_batch):
-		logits, logits_c1 = self.sess.run([self.logits, self.logits_c1], feed_dict={self.X:x_batch})
-		return logits, logits_c1
+	def predict(self, im_batch):
+		y, logits, logits_c1, iou_loss, accu = self.sess.run([self.Y, self.logits, self.logits_c1,self.iou_loss, self.accu], feed_dict={self.X:im_batch})
+		return y, logits, logits_c1, iou_loss, accu
 	
 	#Sample images
 	def random_sample_imfiles(self,imfold="./folder/*.png", size=5):
@@ -77,30 +71,6 @@ class Predict_SegNet:
 			ims.append(im)
 		return fnames, np.array(ims).reshape(-1, im.shape[0], im.shape[1], 1)
 	
-	#Sample im-pairs
-	def random_sample_im_pairs(self,imfoldX="./folder/X/", imfoldY="./folder/Y/", fmt="png", size=5):
-		fnames = glob.glob(imfoldX + "/*." + fmt)
-
-		l = len(fnames)
-		print("Len of imfold: ", l)
-		inds = np.random.randint(0, l, size)
-		fnames = np.take(fnames, inds)
-		
-		ims_X = []
-		ims_Y = []
-		names = []
-		for fname in fnames:
-			imX = cv2.imread(fname,0)
-			ims_X.append(imX)
-			
-			name = fname.strip().split("/")[-1]
-			names.append(name)
-			
-			imY = cv2.imread(imfoldY + "/" + name, 0)
-			ims_Y.append(imY)
-			
-		return names, np.array(ims_X).reshape(-1, imX.shape[0], imX.shape[1], 1), np.array(ims_Y).reshape(-1, imY.shape[0], imY.shape[1], 1)
-	
 	#Fragment Tensor & save images
 	def fragment_save(self, tensor, fnames, outfold):
 		pathlib.Path(outfold).mkdir(exist_ok=True, parents=True)
@@ -114,13 +84,13 @@ class Predict_SegNet:
 		self.fragment_save(ims, fnames, outfold_ims)
 		#y
 		outfold_y = outfold + "/y/"
-		self.fragment_save(y*50, fnames, outfold_y)
+		self.fragment_save(y*255, fnames, outfold_y)
 		#logits
 		outfold_logits = outfold + "/logits/"
-		self.fragment_save(logits*50, fnames, outfold_logits)
+		self.fragment_save(logits*255, fnames, outfold_logits)
 		#logits_c1
 		outfold_logits_c1 = outfold + "/logits_c1/"
-		self.fragment_save(logits_c1*255, fnames, outfold_logits_c1)
+		self.fragment_save(logits_th*255, fnames, outfold_logits_c1)
 		
 		##BLENDED
 		if blended == True:
@@ -131,12 +101,10 @@ class Predict_SegNet:
 				im1 = ims[i]
 				im1 = im1.reshape(im1.shape[0], im1.shape[1])
 				
-				im2 = logits[i]
+				im2 = logits[i]*255
 				im2 = np.array(im2, dtype=np.uint8)
 				
-				#out = self.blend(im1, im2, alpha=0.4,ch=0)
-				out = self.blend_pixelwise(im1, im2, alpha=0.3, nclass_colors=[[0,0,0], [255,0,0], [255,153,255], [0,255,255] ])
-				
+				out = self.blend(im1, im2, alpha=0.4,ch=0)
 				blends.append( out )
 			blends = np.array(blends)
 			self.fragment_save(blends, fnames, outfold_blend)
@@ -152,7 +120,6 @@ class Predict_SegNet:
 				im2 = np.array(im2, dtype=np.uint8)
 				
 				out = self.blend(im1, im2, alpha=0.4, ch=0)
-				
 				blends.append( out )
 			blends = np.array(blends)
 			self.fragment_save(blends, fnames, outfold_blend)
@@ -164,12 +131,10 @@ class Predict_SegNet:
 				im1 = ims[i]
 				im1 = im1.reshape(im1.shape[0], im1.shape[1])
 				
-				im2 = y[i]
+				im2 = y[i]*255
 				im2 = np.array(im2, dtype=np.uint8)
 				
-				#out = self.blend(im1, im2, alpha=0.4, ch=2)
-				out = self.blend_pixelwise(im1, im2, alpha=0.3, nclass_colors=[[0,0,0], [255,0,0], [255,153,255], [0,255,255] ])
-				
+				out = self.blend(im1, im2, alpha=0.4, ch=2)
 				blends.append( out )
 			blends = np.array(blends)
 			self.fragment_save(blends, fnames, outfold_blend)
@@ -179,28 +144,8 @@ class Predict_SegNet:
 		#ch is the channel used to blend
 		im1 = cv2.cvtColor(im1, cv2.COLOR_GRAY2RGB)
 		im2 = cv2.cvtColor(im2, cv2.COLOR_GRAY2RGB)
-		
 		im2[:,:,ch] = 50
 		return cv2.addWeighted(im1, alpha, im2, 1-alpha, 0.0)
-
-	def blend_pixelwise(self, im1, im2_label, alpha=0.3, nclass_colors=[[0,0,0], [255,0,0], [255,153,255], [0,255,255] ]):
-		
-		#ch is the channel used to blend
-		im1 = cv2.cvtColor(im1, cv2.COLOR_GRAY2RGB)
-		#im2 = cv2.cvtColor(im2, cv2.COLOR_GRAY2RGB)
-		im2 = np.zeros(im1.shape, dtype=im1.dtype)
-		
-		for i in range(im2_label.shape[0]):
-			for j in range(im2_label.shape[1]):
-				 l = int(im2_label[i][j])
-				 im2[i][j][0] = nclass_colors[l][0]
-				 im2[i][j][1] = nclass_colors[l][1]
-				 im2[i][j][2] = nclass_colors[l][2]
-				 
-				 
-
-		return cv2.addWeighted(im1, alpha, im2, 1-alpha, 0.0)
-
 	
 	def close(self):
 		self.sess.close()
@@ -210,28 +155,24 @@ class Predict_SegNet:
 ### VISUALIZE & LOG ###
 ##====================##
 
-def visualizer(manager, imfoldX, imfoldY, size, outfold, fmt="png"):
+def visualizer(manager, imfold, size, outfold):
 	#Fetch random test images
-	names, ims_X, ims_Y = manager.random_sample_im_pairs(imfoldX, imfoldY, fmt, size)
-	
+	fnames, ims = manager.random_sample_imfiles(imfold, size)
 	
 	#Run-Predict
-	y, logits, logits_c1, iou_loss, accu = manager.predict(ims_X, ims_Y)
+	y, logits, logits_th, iou_loss, accu = manager.predict(ims)
 	print(y.shape)
 	print(logits.shape)
-	print(logits_c1.shape)
+	print(logits_th.shape)
 	print(iou_loss)
 	print(accu)
 		
 	#Fragment & Save
-	manager.fragment_save_all(ims_X, y, logits, logits_c1, names, outfold, blended=True)
+	manager.fragment_save_all(ims, y, logits, logits_th, fnames, outfold, blended=True)
 	#Log iou_loss & accuracy
 	jdata = {"IoU_loss": float(iou_loss),
 				"IoU": 1.0-float(iou_loss),
-				"accuracy": float(accu),
-				"imfoldX": imfoldX,
-				"imfoldY": imfoldY,
-				"test_ims": names }
+				"accuracy": float(accu) }
 				
 	write_json(outfold + "/predict_metrics.json",jdata)
 	
@@ -244,20 +185,18 @@ if __name__ == "__main__":
 	# ~ im = np.array(im).reshape(1,im.shape[0], im.shape[1], 1)
 
 	## Model info
-	model_fold = "/data/McMaster/raw_ready_resize_OUT/Expt4/2/"
+	model_fold = "/data/McMaster/raw_ready_resize_OUT/Expt2/2/"
 	model_iter = 2
 	manager = Predict_SegNet(model_fold, model_iter)
 
-	
 	## Visualize_args
-	imfoldX = "/data/McMaster/raw_ready_resize/X/"
-	imfoldY = "/data/McMaster/raw_ready_resize/Y/"
-	fmt = "png"
+	imfoldX = "/data/McMaster/raw_ready_resize/X/*.png"
+	imfoldY = "/data/McMaster/raw_ready_resize/Y/*.png"
 	
-	size = 50
+	size = 150
 	outfold = model_fold + "/visualize/model-" + str(model_iter) + "/"
 
 	#RUN Visualization
-	visualizer(manager, imfoldX, imfoldY, size, outfold, fmt)
+	visualizer(manager, imfoldX, imfoldY, size, outfold)
 	
 	

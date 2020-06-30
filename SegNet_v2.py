@@ -208,21 +208,21 @@ class Model:
 		#	Conv 1 layer + BN + ReLU layer
 		#-----------------------------------------------------------------------
 		
-		A1 = Conv_BN_Act_block(self.X, kernel=[3,3,1,32], strides=[1,2,2,1], name="ConvBA_1", train_flag= self.train_flag)
-		display_activation_sep(A1, name="A1", filters= 32)
+		A1 = Conv_BN_Act_block(self.X, kernel=[3,3,1,16], strides=[1,2,2,1], name="ConvBA_1", train_flag= self.train_flag)
+		display_activation_sep(A1, name="A1", filters= 16)
 		#tf.summary.histogram('ConvBA_1', A1)
 		
 		A2 = max_pool2d(A1, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_2")
 		
 		#Encode2
-		A3 = Conv_BN_Act_block(A2, kernel=[3,3,32,16], strides=[1,2,2,1], name="ConvBA_3", train_flag= self.train_flag)		
+		A3 = Conv_BN_Act_block(A2, kernel=[3,3,16, 8], strides=[1,2,2,1], name="ConvBA_3", train_flag= self.train_flag)		
 		A4 = max_pool2d(A3, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_4")
 		
 		# ~ display_activation(A2_conv, name="A2_conv", reshape_height = 4, resize_scale = 5)
 		#display_activation_sep(A2_conv, name="A2_conv", filters= 2)		
 
 		#Encode3
-		A5 = Conv_BN_Act_block(A4, kernel=[3,3,16,8], strides=[1,2,2,1], name="ConvBA_5", train_flag= self.train_flag)
+		A5 = Conv_BN_Act_block(A4, kernel=[3,3,8,8], strides=[1,2,2,1], name="ConvBA_5", train_flag= self.train_flag)
 		A6 = max_pool2d(A5, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_6")
 		
 		#Decode4
@@ -250,6 +250,7 @@ class Model:
 		self.predict = tf.argmax( tf.nn.softmax(A11), axis= 3)
 		self.predict = tf.cast(self.predict, dtype=tf.float64)
 		self.predict = tf.expand_dims(self.predict, axis=3, name="predict")
+		tf.summary.histogram("Predict", self.predict)
 		display_image(self.predict, name="predict")
 					
 		#============#
@@ -269,9 +270,9 @@ class Model:
 		print("Logits: ", self.logits.shape)
 		print("Labels: ", self.Y.shape)
 
-		self.Y_hot = tf.one_hot( tf.cast(self.Y , tf.uint8), axis=-1, depth= nclass)
+		self.Y_hot = tf.stop_gradient( tf.one_hot( tf.cast(self.Y , tf.uint8), axis=-1, depth= nclass) )
 		
-		self.loss_raw = tf.nn.softmax_cross_entropy_with_logits_v2(self.Y_hot, self.logits)
+		self.loss_raw = tf.nn.softmax_cross_entropy_with_logits(labels=self.Y_hot, logits=self.logits)
 		self.loss = tf.reduce_sum(self.loss_raw, name="loss")
 		tf.summary.scalar("Cross Entropy loss", self.loss)
 		
@@ -331,7 +332,7 @@ class Model:
 		# ~ tf.summary.scalar("accuracy", self.accuracy)
 		
 		# ~ self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-1).minimize(self.loss)
-		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-1).minimize(self.loss_raw)
+		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-2).minimize(self.loss_raw)
 		self.var_init = tf.global_variables_initializer()
 		
 		self.merged = tf.summary.merge_all()
@@ -580,18 +581,18 @@ if __name__ == "__main__":
 	# ~ outfold = "/home/aswin-rpi/Documents/GITs/test_resize_OUT_3/"
 	
 	directory = "/data/McMaster/raw_ready_resize/"
-	outfold = "/data/McMaster/raw_ready_resize_OUT/Expt2/"
+	outfold = "/data/McMaster/raw_ready_resize_OUT/Expt4/"
 	
 	outfold = outfold + "/" + str(len(glob.glob(outfold+"/*") ) ) + "/"
 	
 	fmt = "png"
-	batch_size = 1
+	batch_size = 4
 	shuffle = True
-	fetch_size = 5000
+	fetch_size = 350000
 	num1 = 512
 	num2 = 512
 	
-	epochs = 10
+	epochs = 15
 	
 	
 	print("\n#### OUTFOLD is ", outfold)

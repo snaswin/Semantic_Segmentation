@@ -169,8 +169,8 @@ def IoU(logits, labels):
 
 def compute_accuracy(Zout, Y):
 	logits = tf.cast(Zout, tf.float64)
-	#logits = Zout
-	labels = Y
+	labels = tf.cast(Y, tf.float64)
+	
 	with tf.variable_scope("Accuracy"):
 		# ~ correct = tf.equal(tf.argmax(logits, 1) , tf.argmax(labels, 1) )
 		# ~ accuracy = tf.reduce_mean(tf.cast(correct, tf.float32) )
@@ -191,94 +191,132 @@ class Model:
 
 
 	def define_model(self,num1, num2, nclass):
-		
-		#create placeholders
-		self.X = tf.placeholder(tf.float64, [None, num1, num2, 1], name="X")
-		self.X = self.X/255.0
 
-		print("Model shape- ",self.X.shape)		
-		display_image(self.X, name="X")
-		
-		self.Y = tf.placeholder(tf.float64, [None, num1, num2, 1], name="Y")
-		display_image(self.Y, name="Y")
-		
-		self.train_flag = tf.placeholder(tf.bool, name="train_flag")
-		
-		#-----------------------------------------------------------------------
-		#	Conv 1 layer + BN + ReLU layer
-		#-----------------------------------------------------------------------
-		
-		A1 = Conv_BN_Act_block(self.X, kernel=[3,3,1,32], strides=[1,2,2,1], name="ConvBA_1", train_flag= self.train_flag)
-		display_activation_sep(A1, name="A1", filters= 32)
-		#tf.summary.histogram('ConvBA_1', A1)
-		
-		A2 = max_pool2d(A1, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_2")
-		
-		#Encode2
-		A3 = Conv_BN_Act_block(A2, kernel=[3,3,32,16], strides=[1,2,2,1], name="ConvBA_3", train_flag= self.train_flag)		
-		A4 = max_pool2d(A3, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_4")
-		
-		# ~ display_activation(A2_conv, name="A2_conv", reshape_height = 4, resize_scale = 5)
-		#display_activation_sep(A2_conv, name="A2_conv", filters= 2)		
+		with tf.device("/gpu:0"):
+				
+			#create placeholders
+			self.X = tf.placeholder(tf.float64, [None, num1, num2, 1], name="X")
+			self.X = self.X/255.0
 
-		#Encode3
-		A5 = Conv_BN_Act_block(A4, kernel=[3,3,16,8], strides=[1,2,2,1], name="ConvBA_5", train_flag= self.train_flag)
-		A6 = max_pool2d(A5, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_6")
+			print("Model shape- ",self.X.shape)		
+			display_image(self.X, name="X")
+			
+			self.Y = tf.placeholder(tf.float64, [None, num1, num2, 1], name="Y")
+			display_image(self.Y, name="Y")
+			
+			self.train_flag = tf.placeholder(tf.bool, name="train_flag")
+			
+			#-----------------------------------------------------------------------
+			#	Conv 1 layer + BN + ReLU layer
+			#-----------------------------------------------------------------------
+		with tf.device("/gpu:1"):
+			
+			
+			A1 = Conv_BN_Act_block(self.X, kernel=[3,3,1,16], strides=[1,2,2,1], name="ConvBA_1", train_flag= self.train_flag)
+			display_activation_sep(A1, name="A1", filters= 16)
+			#tf.summary.histogram('ConvBA_1', A1)
+			
+			A2 = max_pool2d(A1, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_2")
 		
-		#Decode4
-		A7 = conv2d_transpose(A6, kernel=[3,3,8,8], strides=[1,2,2,1], name="ConvTrans_7")
-		A8 = Conv_BN_Act_block(A7, kernel=[3,3,8,4], strides=[1,2,2,1], name="ConvBA_8", train_flag= self.train_flag)
+		with tf.device("/gpu:2"):
+				
+			#Encode2
+			A3 = Conv_BN_Act_block(A2, kernel=[3,3,16, 8], strides=[1,2,2,1], name="ConvBA_3", train_flag= self.train_flag)		
+			A4 = max_pool2d(A3, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_4")
+				
+			# ~ display_activation(A2_conv, name="A2_conv", reshape_height = 4, resize_scale = 5)
+			#display_activation_sep(A2_conv, name="A2_conv", filters= 2)		
 		
-		#Decode5
-		A9 = conv2d_transpose(A8, kernel=[3,3,4,4], strides=[1,2,2,1], name="ConvTrans_9")
-		A10 = Conv_BN_Act_block(A9, kernel=[3,3,4,4], strides=[1,2,2,1], name="ConvBA_10", train_flag= self.train_flag)
+		with tf.device("/gpu:3"):
+				
+			#Encode3
+			A5 = Conv_BN_Act_block(A4, kernel=[3,3,8,8], strides=[1,2,2,1], name="ConvBA_5", train_flag= self.train_flag)
+			A6 = max_pool2d(A5, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_6")
 		
-		#Decode6
-		A11 = conv2d_transpose(A10, kernel=[3,3,nclass,4], strides=[1,2,2,1], name="ConvTrans_11")
-		tf.summary.histogram('A11', A11)
-		display_image(A11, name="A11")
+		with tf.device("/gpu:4"):
+			
+			#Decode4
+			A7 = conv2d_transpose(A6, kernel=[3,3,8,8], strides=[1,2,2,1], name="ConvTrans_7")
+			A8 = Conv_BN_Act_block(A7, kernel=[3,3,8,4], strides=[1,2,2,1], name="ConvBA_8", train_flag= self.train_flag)
 		
-		########
-		self.logits = tf.identity(A11, name = "logits")
-		print("Logits : ", self.logits.shape)
-		print("Logits : ", self.logits.dtype)		
-		tf.summary.histogram('logits', self.logits)
-		display_image(self.logits, name="logits")
+		with tf.device("/gpu:5"):
+							
+			#Decode5
+			A9 = conv2d_transpose(A8, kernel=[3,3,4,4], strides=[1,2,2,1], name="ConvTrans_9")
+			A10 = Conv_BN_Act_block(A9, kernel=[3,3,4,4], strides=[1,2,2,1], name="ConvBA_10", train_flag= self.train_flag)
+		
+			#Decode6
+			A11 = conv2d_transpose(A10, kernel=[3,3,nclass,4], strides=[1,2,2,1], name="ConvTrans_11")
+			tf.summary.histogram('A11', A11)
+			display_image(A11, name="A11")
+			
+			########
+			self.logits = tf.identity(A11, name = "logits")
+			print("Logits : ", self.logits.shape)
+			print("Logits : ", self.logits.dtype)		
+			tf.summary.histogram('logits', self.logits)
+			display_image(self.logits, name="logits")
+			
+		with tf.device("/gpu:6"):
+			
+			# ~ self.logits = tf.nn.sigmoid( A11, name="logits")
+			self.predict = tf.argmax( tf.nn.softmax(A11), axis= 3)
+			self.predict = tf.cast(self.predict, dtype=tf.float64)
+			self.predict = tf.expand_dims(self.predict, axis=3, name="predict")
+			tf.summary.histogram("Predict", self.predict)
+			display_image(self.predict, name="predict")
+						
+			#============#
+			print("A1 : ", A1.shape)
+			print("A2 : ", A2.shape)
+			print("A3 : ", A3.shape)
+			print("A4 : ", A4.shape)
+			print("A5 : ", A5.shape)
+			print("A6 : ", A6.shape)
+			print("A7 : ", A7.shape)
+			print("A8 : ", A8.shape)
+			print("A9 : ", A9.shape)
+			print("A10 : ", A10.shape)
+			print("A11 : ", A11.shape)
+			print("Logits : ", self.logits.shape)
+			#============#
+			print("Logits: ", self.logits.shape)
+			print("Labels: ", self.Y.shape)
+		
+			self.Y_hot = tf.stop_gradient( tf.one_hot( tf.cast(self.Y , tf.uint8), axis=-1, depth= nclass) )
+			
+			self.loss_raw = tf.nn.softmax_cross_entropy_with_logits(labels=self.Y_hot, logits=self.logits)
+			self.loss = tf.reduce_sum(self.loss_raw, name="loss")
+			tf.summary.scalar("Cross Entropy loss", self.loss)
+			
+			self.accuracy = compute_accuracy( tf.one_hot( tf.cast(self.predict, tf.uint8 ), axis=-1, depth=nclass) , self.Y_hot)
+			#self.accuracy = tf.identity(self.loss, name="accuracy")
+			tf.summary.scalar("accuracy", self.accuracy)
+		
+			#Project predictions
+			self.logits_c1 = tf.cast( tf.math.equal(self.predict, tf.constant(1.0, dtype=tf.float64) ), dtype=tf.float64, name="logits_c1")
+			display_image(self.logits_c1, name="logits_c1")
+			self.logits_c2 = tf.cast( tf.math.equal(self.predict, tf.constant(2.0, dtype=tf.float64) ), dtype=tf.float64, name="logits_c2")
+			display_image(self.logits_c2, name="logits_c2")
+			self.logits_c3 = tf.cast( tf.math.equal(self.predict, tf.constant(3.0, dtype=tf.float64) ), dtype=tf.float64, name="logits_c3")
+			display_image(self.logits_c3, name="logits_c3")
+			
+			#Project labels
+			self.Y_c1 = tf.cast( tf.math.equal(self.Y, tf.constant(1.0, dtype=tf.float64) ), dtype=tf.float64, name="Y_c1")
+			display_image(self.Y_c1, name="Y_c1")
+			self.Y_c2 = tf.cast( tf.math.equal(self.Y, tf.constant(2.0, dtype=tf.float64) ), dtype=tf.float64, name="Y_c2")
+			display_image(self.Y_c2, name="Y_c2")
+			self.Y_c3 = tf.cast( tf.math.equal(self.Y, tf.constant(3.0, dtype=tf.float64) ), dtype=tf.float64, name="Y_c3")
+			display_image(self.Y_c3, name="Y_c3")
+	
+		with tf.device("/gpu:7"):
+	
+			self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-2).minimize(self.loss_raw)
+			self.var_init = tf.global_variables_initializer()
+			
+			self.merged = tf.summary.merge_all()
 		
 		
-		# ~ self.logits = tf.nn.sigmoid( A11, name="logits")
-		self.predict = tf.argmax( tf.nn.softmax(A11), axis= 3)
-		self.predict = tf.cast(self.predict, dtype=tf.float64)
-		self.predict = tf.expand_dims(self.predict, axis=3, name="predict")
-		display_image(self.predict, name="predict")
-					
-		#============#
-		print("A1 : ", A1.shape)
-		print("A2 : ", A2.shape)
-		print("A3 : ", A3.shape)
-		print("A4 : ", A4.shape)
-		print("A5 : ", A5.shape)
-		print("A6 : ", A6.shape)
-		print("A7 : ", A7.shape)
-		print("A8 : ", A8.shape)
-		print("A9 : ", A9.shape)
-		print("A10 : ", A10.shape)
-		print("A11 : ", A11.shape)
-		print("Logits : ", self.logits.shape)
-		#============#
-		print("Logits: ", self.logits.shape)
-		print("Labels: ", self.Y.shape)
-
-		self.Y_hot = tf.one_hot( tf.cast(self.Y , tf.uint8), axis=-1, depth= nclass)
-		
-		self.loss_raw = tf.nn.softmax_cross_entropy_with_logits_v2(self.Y_hot, self.logits)
-		self.loss = tf.reduce_sum(self.loss_raw, name="loss")
-		tf.summary.scalar("Cross Entropy loss", self.loss)
-		
-		self.accuracy = compute_accuracy(self.Y_hot, self.logits)
-		tf.summary.scalar("accuracy", self.accuracy)
-		
-
 		##################################################################
 		# ~ iou = IoU(self.Y, self.logits)
 		# ~ self.loss = tf.subtract( tf.constant(1.0, dtype=tf.float64), iou, name="loss")
@@ -288,23 +326,6 @@ class Model:
 		# ~ tf.summary.scalar("accuracy", self.accuracy)		
 		##################################################################
 	
-		
-		#Project predictions
-		self.logits_c1 = tf.cast( tf.math.equal(self.predict, tf.constant(1.0, dtype=tf.float64) ), dtype=tf.float64, name="logits_c1")
-		display_image(self.logits_c1, name="logits_c1")
-		self.logits_c2 = tf.cast( tf.math.equal(self.predict, tf.constant(2.0, dtype=tf.float64) ), dtype=tf.float64, name="logits_c2")
-		display_image(self.logits_c2, name="logits_c2")
-		self.logits_c3 = tf.cast( tf.math.equal(self.predict, tf.constant(3.0, dtype=tf.float64) ), dtype=tf.float64, name="logits_c3")
-		display_image(self.logits_c3, name="logits_c3")
-		
-		#Project labels
-		self.Y_c1 = tf.cast( tf.math.equal(self.Y, tf.constant(1.0, dtype=tf.float64) ), dtype=tf.float64, name="Y_c1")
-		display_image(self.Y_c1, name="Y_c1")
-		self.Y_c2 = tf.cast( tf.math.equal(self.Y, tf.constant(2.0, dtype=tf.float64) ), dtype=tf.float64, name="Y_c2")
-		display_image(self.Y_c2, name="Y_c2")
-		self.Y_c3 = tf.cast( tf.math.equal(self.Y, tf.constant(3.0, dtype=tf.float64) ), dtype=tf.float64, name="Y_c3")
-		display_image(self.Y_c3, name="Y_c3")
-
 		#Loss
 		# ~ iou_c1 = IoU(self.Y_c1, self.logits_c1)
 		# ~ iou_c2 = IoU(self.Y_c2, self.logits_c2)
@@ -331,11 +352,9 @@ class Model:
 		# ~ tf.summary.scalar("accuracy", self.accuracy)
 		
 		# ~ self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-1).minimize(self.loss)
-		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-1).minimize(self.loss_raw)
-		self.var_init = tf.global_variables_initializer()
+		#with tf.device("/gpu:2"):
 		
-		self.merged = tf.summary.merge_all()
-		
+			
 	def test(self, sess, x_batch, y_batch):
 		 test_loss, test_accu, test_summary, logits = sess.run([self.loss, self.accuracy, self.merged, self.logits], feed_dict={self.X: x_batch, self.Y: y_batch, self.train_flag: False} )
 		 return test_loss, test_accu, test_summary
@@ -355,7 +374,7 @@ def write_js(data, fname="./data_pairs.json"):
 
 def allocate():
 	# ~ config = tf.ConfigProto(log_device_placement=False, device_count = {'GPU': 0})
-	config = tf.ConfigProto(log_device_placement=False)
+	config = tf.ConfigProto(allow_soft_placement=True, log_device_placement=False)
 	config.gpu_options.allow_growth=True
 	return config
 
@@ -580,18 +599,18 @@ if __name__ == "__main__":
 	# ~ outfold = "/home/aswin-rpi/Documents/GITs/test_resize_OUT_3/"
 	
 	directory = "/data/McMaster/raw_ready_resize/"
-	outfold = "/data/McMaster/raw_ready_resize_OUT/Expt2/"
+	outfold = "/data/McMaster/raw_ready_resize_OUT/Expt6_8xRTX2060Super/"
 	
 	outfold = outfold + "/" + str(len(glob.glob(outfold+"/*") ) ) + "/"
 	
 	fmt = "png"
 	batch_size = 1
 	shuffle = True
-	fetch_size = 5000
+	fetch_size = 350000
 	num1 = 512
 	num2 = 512
 	
-	epochs = 10
+	epochs = 15
 	
 	
 	print("\n#### OUTFOLD is ", outfold)
