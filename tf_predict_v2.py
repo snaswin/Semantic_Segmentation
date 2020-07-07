@@ -46,8 +46,8 @@ class Predict_SegNet:
 		self.X = graph.get_tensor_by_name('Model/X:0')
 		self.Y = graph.get_tensor_by_name('Model/Y:0')
 		self.logits = graph.get_tensor_by_name('Model/predict:0')
-		self.logits_c1 = graph.get_tensor_by_name('Model/logits_c1:0')
-		self.iou_loss = graph.get_tensor_by_name('Model/loss:0')
+		#self.logits_c1 = graph.get_tensor_by_name('Model/logits_c1:0')
+		self.loss = graph.get_tensor_by_name('Model/loss:0')
 		self.accu = graph.get_tensor_by_name('Model/Accuracy/Mean:0')
 		
 	
@@ -55,13 +55,18 @@ class Predict_SegNet:
 	def predict(self, x_batch, y_batch):
 		# ~ y, logits, logits_c1, iou_loss, accu = self.sess.run([self.Y, self.logits, self.logits_c1,self.iou_loss, self.accu], feed_dict={self.X:x_batch, self.Y:y_batch})
 		# ~ return y, logits, logits_c1, iou_loss, accu
-		y, logits, logits_c1, iou_loss = self.sess.run([self.Y, self.logits, self.logits_c1,self.iou_loss], feed_dict={self.X:x_batch, self.Y:y_batch})
-		return y, logits, logits_c1, iou_loss, 0.0
+		y, logits, loss, acc = self.sess.run([self.Y, self.logits, self.loss, self.accu], feed_dict={self.X:x_batch, self.Y:y_batch})
+		return y, logits, loss, acc
 		#Bug fix- accuracy
 		
+	# ~ def predict_real(self, x_batch):
+		# ~ logits, logits_c1 = self.sess.run([self.logits, self.logits_c1], feed_dict={self.X:x_batch})
+		# ~ return logits, logits_c1
+	
 	def predict_real(self, x_batch):
-		logits, logits_c1 = self.sess.run([self.logits, self.logits_c1], feed_dict={self.X:x_batch})
-		return logits, logits_c1
+		predict = self.sess.run([self.logits], feed_dict={self.X:x_batch})
+		return logits
+	
 	
 	#Sample images
 	def random_sample_imfiles(self,imfold="./folder/*.png", size=5):
@@ -118,9 +123,9 @@ class Predict_SegNet:
 		#logits
 		outfold_logits = outfold + "/logits/"
 		self.fragment_save(logits*50, fnames, outfold_logits)
-		#logits_c1
-		outfold_logits_c1 = outfold + "/logits_c1/"
-		self.fragment_save(logits_c1*255, fnames, outfold_logits_c1)
+		# ~ #logits_c1
+		# ~ outfold_logits_c1 = outfold + "/logits_c1/"
+		# ~ self.fragment_save(logits_c1*255, fnames, outfold_logits_c1)
 		
 		##BLENDED
 		if blended == True:
@@ -141,21 +146,21 @@ class Predict_SegNet:
 			blends = np.array(blends)
 			self.fragment_save(blends, fnames, outfold_blend)
 			
-			#Logits_th
-			outfold_blend = outfold + "/blended_logits_c1/"
-			blends = []
-			for i in range(ims.shape[0]):
-				im1 = ims[i]
-				im1 = im1.reshape(im1.shape[0], im1.shape[1])
+			# ~ #Logits_th
+			# ~ outfold_blend = outfold + "/blended_logits_c1/"
+			# ~ blends = []
+			# ~ for i in range(ims.shape[0]):
+				# ~ im1 = ims[i]
+				# ~ im1 = im1.reshape(im1.shape[0], im1.shape[1])
 				
-				im2 = logits_c1[i]*255
-				im2 = np.array(im2, dtype=np.uint8)
+				# ~ im2 = logits_c1[i]*255
+				# ~ im2 = np.array(im2, dtype=np.uint8)
 				
-				out = self.blend(im1, im2, alpha=0.4, ch=0)
+				# ~ out = self.blend(im1, im2, alpha=0.4, ch=0)
 				
-				blends.append( out )
-			blends = np.array(blends)
-			self.fragment_save(blends, fnames, outfold_blend)
+				# ~ blends.append( out )
+			# ~ blends = np.array(blends)
+			# ~ self.fragment_save(blends, fnames, outfold_blend)
 			
 			#y
 			outfold_blend = outfold + "/blended_y/"
@@ -216,22 +221,30 @@ def visualizer(manager, imfoldX, imfoldY, size, outfold, fmt="png"):
 	
 	
 	#Run-Predict
-	y, logits, logits_c1, iou_loss, accu = manager.predict(ims_X, ims_Y)
+	y, logits, loss, accu = manager.predict(ims_X, ims_Y)
 	print(y.shape)
 	print(logits.shape)
-	print(logits_c1.shape)
-	print(iou_loss)
+	# ~ print(logits_c1.shape)
+	print(loss)
 	print(accu)
+	
+	print("#####\n####")
+	ll = logits.ravel()
+	print("Min and Max: ", ll.min(), ll.max())
+	#plt.hist(ll, bins=16)
+	#plt.savefig(outfold + "/predict_hist.png")
+	#plt.show()
 		
 	#Fragment & Save
-	manager.fragment_save_all(ims_X, y, logits, logits_c1, names, outfold, blended=True)
+	manager.fragment_save_all(ims_X, y, logits, None, names, outfold, blended=True)
 	#Log iou_loss & accuracy
-	jdata = {"IoU_loss": float(iou_loss),
-				"IoU": 1.0-float(iou_loss),
+	jdata = {"loss": float(loss),
 				"accuracy": float(accu),
 				"imfoldX": imfoldX,
 				"imfoldY": imfoldY,
-				"test_ims": names }
+				"test_ims": names,
+				"Logits_min": ll.min(),
+				"Logits_max" : ll.max() }
 				
 	write_json(outfold + "/predict_metrics.json",jdata)
 	
@@ -244,8 +257,8 @@ if __name__ == "__main__":
 	# ~ im = np.array(im).reshape(1,im.shape[0], im.shape[1], 1)
 
 	## Model info
-	model_fold = "/data/McMaster/raw_ready_resize_OUT/Expt4/2/"
-	model_iter = 2
+	model_fold = "/data/McMaster/raw_ready_resize_OUT/Expt1/29/"
+	model_iter = 0
 	manager = Predict_SegNet(model_fold, model_iter)
 
 	
