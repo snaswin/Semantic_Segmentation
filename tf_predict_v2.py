@@ -101,7 +101,7 @@ class Predict_SegNet:
 			name = fname.strip().split("/")[-1]
 			names.append(name)
 			
-			imY = cv2.imread(imfoldY + "/" + name, 0)
+			imY = cv2.imread(imfoldY + "/" + name, 0)			
 			ims_Y.append(imY)
 			
 		return names, np.array(ims_X).reshape(-1, imX.shape[0], imX.shape[1], 1), np.array(ims_Y).reshape(-1, imY.shape[0], imY.shape[1], 1)
@@ -234,7 +234,15 @@ def visualizer(manager, imfoldX, imfoldY, size, outfold, fmt="png"):
 	#plt.hist(ll, bins=16)
 	#plt.savefig(outfold + "/predict_hist.png")
 	#plt.show()
-		
+	
+	# ~ fig, ax = plt.subplots(3)
+	# ~ ax[0].imshow(y[0].reshape(logits[1].shape[:2]))
+	# ~ ax[1].imshow(logits[1].reshape(logits[1].shape[:2]))
+	# ~ ax[2].imshow(ims_Y[2].reshape(logits[1].shape[:2]))
+	# ~ plt.show()
+	
+	# ~ input("waity")
+	
 	#Fragment & Save
 	manager.fragment_save_all(ims_X, y, logits, None, names, outfold, blended=True)
 	#Log iou_loss & accuracy
@@ -257,14 +265,14 @@ if __name__ == "__main__":
 	# ~ im = np.array(im).reshape(1,im.shape[0], im.shape[1], 1)
 
 	## Model info
-	model_fold = "/data/McMaster/raw_ready_resize_OUT/Expt1/29/"
+	model_fold = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed_OUT/0/"
 	model_iter = 0
 	manager = Predict_SegNet(model_fold, model_iter)
 
 	
 	## Visualize_args
-	imfoldX = "/data/McMaster/raw_ready_resize/X/"
-	imfoldY = "/data/McMaster/raw_ready_resize/Y/"
+	imfoldX = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed/X/"
+	imfoldY = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed/Y/"
 	fmt = "png"
 	
 	size = 50

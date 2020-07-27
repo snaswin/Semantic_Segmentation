@@ -279,9 +279,14 @@ class Model:
 		tf.summary.histogram('A5', A5)
 		tf.summary.histogram('A6', A6)
 		tf.summary.histogram('A7', A7)
+		tf.summary.histogram('A7a', A7a)
 		tf.summary.histogram('A8', A8)
+		tf.summary.histogram('A8a', A8a)
 		tf.summary.histogram('A9', A9)
+		tf.summary.histogram('A9a', A9a)
 		tf.summary.histogram('A10', A10)
+		tf.summary.histogram('A10a', A10a)
+		
 		
 		
 		
@@ -290,7 +295,7 @@ class Model:
 		self.predict = tf.argmax( self.logits, axis= 3)
 		self.predict = tf.cast(self.predict, dtype=tf.float64)
 		self.predict = tf.expand_dims(self.predict, axis=3, name="predict")
-		tf.summary.histogram("Predict", self.predict)
+		tf.summary.histogram("predict", self.predict)
 		display_image(self.predict, name="predict")
 
 		#============#
@@ -498,7 +503,7 @@ class Manager:
 		
 		self.mod = Model(num1 = self.num1 , num2 = self.num2, nclass= self.nclass)
 		
-		self.saver = tf.train.Saver(max_to_keep=100)
+		self.saver = tf.train.Saver(max_to_keep=1000)
 
 		#summary
 		self.train_writer = tf.summary.FileWriter(self.outfold + "/logs/train/", self.sess.graph)
@@ -635,20 +640,20 @@ class Manager:
 		
 if __name__ == "__main__":
 	
-	directory = "/data/McMaster/raw_ready_resize/"
-	outfold = "/data/McMaster/raw_ready_resize_OUT/Expt1/"
+	directory = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed/"
+	outfold = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed_OUT/"
 	
 	outfold = outfold + "/" + str(len(glob.glob(outfold+"/*") ) ) + "/"
 	print("############################### \nOutfold is ", outfold, "\n###############################")
 	
 	fmt = "png"
-	batch_size = 32
+	batch_size = 64
 	shuffle = True
 	fetch_size = 1000
 	num1 = 512
 	num2 = 512
 	
-	epochs = 15
+	epochs = 25
 	
 	
 	print("\n#### OUTFOLD is ", outfold)
