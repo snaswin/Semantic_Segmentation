@@ -265,14 +265,17 @@ if __name__ == "__main__":
 	# ~ im = np.array(im).reshape(1,im.shape[0], im.shape[1], 1)
 
 	## Model info
-	model_fold = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed_OUT/0/"
-	model_iter = 0
+	#model_fold = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed_OUT/0/"
+	model_fold = "/data/McMaster/real_data/real_reformed_OUT/3/"
+	model_iter = 2
 	manager = Predict_SegNet(model_fold, model_iter)
 
 	
 	## Visualize_args
-	imfoldX = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed/X/"
-	imfoldY = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed/Y/"
+	#imfoldX = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed/X/"
+	#imfoldY = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed/Y/"
+	imfoldX = "/data/McMaster/real_data/real_reformed/X/"
+	imfoldY = "/data/McMaster/real_data/real_reformed/Y/"
 	fmt = "png"
 	
 	size = 50

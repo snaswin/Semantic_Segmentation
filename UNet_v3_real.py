@@ -391,7 +391,7 @@ class Model:
 		# ~ self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-2).minimize(self.loss_raw)
 		
 		
-		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-2).minimize(self.loss)
+		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-3).minimize(self.loss)
 		self.var_init = tf.global_variables_initializer()
 		
 		self.merged = tf.summary.merge_all()
@@ -551,7 +551,7 @@ class Manager:
 	
 	#TRAIN	
 	def start_train(self, epochs=20):
-
+		
 		#Training
 		plt.ion()		
 		
@@ -560,7 +560,7 @@ class Manager:
 			epoch_accu = 0.0	
 			for batch_num in tqdm(range(self.total_minibatches)):
 				x_train_batch, y_train_batch = self.get_batch(self.train_names, batch_num)
-								
+
 				train_summary, train_loss, train_accuracy = self.mod.train(self.sess, x_train_batch, y_train_batch)
 				
 				epoch_cost = epoch_cost + train_loss/self.total_minibatches
