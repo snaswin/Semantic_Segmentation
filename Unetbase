@@ -1,0 +1,169 @@
+	def define_model_UNet(self,num1, num2, nclass):
+		#create placeholders
+		self.X = tf.placeholder(tf.float64, [None, num1, num2, 1], name="X")
+		#self.X = (self.X + 5.0)/255.0
+
+		print("Model shape- ",self.X.shape)		
+		display_image(self.X, name="X")
+		
+		self.Y = tf.placeholder(tf.float64, [None, num1, num2, 1], name="Y")
+		display_image(self.Y, name="Y")
+		tf.summary.histogram('Y', self.Y)
+		
+		self.train_flag = tf.placeholder(tf.bool, name="train_flag")
+		
+		"""
+		A1 :  (?, 512, 512, 16)
+		A2 :  (?, 256, 256, 16)
+		A3 :  (?, 256, 256, 8)
+		A4 :  (?, 128, 128, 8)
+		A5 :  (?, 128, 128, 8)
+		A6 :  (?, 64, 64, 8)
+		A7 :  (?, 128, 128, 8)
+		A8 :  (?, 128, 128, 4)
+		A9 :  (?, 256, 256, 4)
+		A10 :  (?, 256, 256, 4)
+		A11 :  (?, 512, 512, 4)
+		Logits :  (?, 512, 512, 4)
+		Logits:  (?, 512, 512, 4)
+		Labels:  (?, 512, 512, 1)
+		"""
+		
+		
+		#-----------------------------------------------------------------------
+		#	Conv 1 layer + BN + ReLU layer
+		#-----------------------------------------------------------------------
+		
+		A1 = Conv_BN_Act_block(self.X, kernel=[3,3,1,8], strides=[1,2,2,1], name="ConvBA_1", train_flag= self.train_flag)
+		display_activation_sep(A1, name="A1", filters= 8)
+		tf.summary.histogram('A1', A1)
+		
+		A2 = max_pool2d(A1, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_2")
+		
+		#Encode2
+		A3 = Conv_BN_Act_block(A2, kernel=[3,3,8, 4], strides=[1,2,2,1], name="ConvBA_3", train_flag= self.train_flag)		
+		A4 = max_pool2d(A3, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_4")
+		
+		#Encode3
+		A5 = Conv_BN_Act_block(A4, kernel=[3,3,4,8], strides=[1,2,2,1], name="ConvBA_5", train_flag= self.train_flag)
+		A6 = max_pool2d(A5, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_6")
+		
+		#Decode4
+		A7 = conv2d_transpose(A6, kernel=[3,3,8,8], strides=[1,2,2,1], name="ConvTrans_7")
+		#Concat
+		A7a = tf.concat([A7, A5], axis=-1, name="Concat_7")
+		A8 = Conv_BN_Act_block(A7a, kernel=[3,3,16,4], strides=[1,2,2,1], name="ConvBA_8", train_flag= self.train_flag)
+		#Concat
+		A8a = tf.concat([A8, A4], axis=-1, name="Concat_8")
+		
+		#Decode5
+		A9 = conv2d_transpose(A8a, kernel=[3,3,4,8], strides=[1,2,2,1], name="ConvTrans_9")
+		#Concat
+		A9a = tf.concat([A9, A3], axis=-1, name="Concat_9")
+
+		A10 = Conv_BN_Act_block(A9a, kernel=[3,3,8,8], strides=[1,2,2,1], name="ConvBA_10", train_flag= self.train_flag)
+		#Concat
+		A10a = tf.concat([A10, A2], axis=-1, name="Concat_10")
+		#Decode6
+		A11 = conv2d_transpose(A10a, kernel=[3,3,nclass,16], strides=[1,2,2,1], name="ConvTrans_11")
+		
+		tf.summary.histogram('A11', A11)
+		display_image(A11, name="A11")
+		
+		########
+		#self.logits = tf.identity(A11, name = "logits")
+		self.logits = tf.nn.sigmoid(A11, name="logits")
+		
+		print("Logits shape: ", self.logits.shape)
+		print("Logits type: ", self.logits.dtype)		
+		tf.summary.histogram('logits', self.logits)
+		display_image(self.logits, name="logits")
+		
+		tf.summary.histogram('A2', A2)
+		tf.summary.histogram('A3', A3)
+		tf.summary.histogram('A4', A4)
+		tf.summary.histogram('A5', A5)
+		tf.summary.histogram('A6', A6)
+		tf.summary.histogram('A7', A7)
+		tf.summary.histogram('A7a', A7a)
+		tf.summary.histogram('A8', A8)
+		tf.summary.histogram('A8a', A8a)
+		tf.summary.histogram('A9', A9)
+		tf.summary.histogram('A9a', A9a)
+		tf.summary.histogram('A10', A10)
+		tf.summary.histogram('A10a', A10a)
+		
+		
+		#self.predict = tf.argmax( tf.nn.softmax(A11), axis= 3)
+		self.predict = tf.argmax( self.logits, axis= 3)
+		#self.predict = tf.cast(self.predict, dtype=tf.float64)
+		self.predict = tf.expand_dims(self.predict, axis=3, name="predict")
+		tf.summary.histogram("predict", self.predict)
+		display_image(self.predict, name="predict")
+
+		#============#
+		print("A1 : ", A1.shape)
+		print("A2 : ", A2.shape)
+		print("A3 : ", A3.shape)
+		print("A4 : ", A4.shape)
+		print("A5 : ", A5.shape)
+		print("A6 : ", A6.shape)
+		print("A7 : ", A7.shape)
+		print("#A7a : ", A7a.shape)
+		print("A8 : ", A8.shape)
+		print("#A8a : ", A8a.shape)
+		print("A9 : ", A9.shape)
+		print("#A9a : ", A9a.shape)
+		print("A10 : ", A10.shape)
+		print("#A10a : ", A10a.shape)
+		print("A11 : ", A11.shape)
+		print("Logits : ", self.logits.shape)
+		#============#
+		print("predict: ", self.predict.shape)
+		print("Labels: ", self.Y.shape)
+
+		#self.Y_hot = tf.stop_gradient( tf.one_hot( tf.cast(self.Y , tf.uint8), axis=-1, depth= nclass) )
+		#self.loss_raw = tf.nn.softmax_cross_entropy_with_logits(labels=self.Y_hot, logits=self.logits)
+		
+		
+		# ~ logits_reshape = tf.reshape(self.logits, shape=(-1, self.logits.shape[-1]))
+		# ~ labels_reshape = tf.reshape(self.Y, shape=(-1, self.Y.shape[-1]))
+
+		# ~ cce = tf.keras.losses.SparseCategoricalCrossentropy()
+		# ~ loss = cce(y_true=labels_reshape, y_pred=logits_reshape)
+		# ~ #self.loss = tf.reduce_sum(self.loss_raw, name="loss")
+		
+		# ~ self.loss = tf.identity(loss, name="loss")
+		# ~ tf.summary.scalar("Cross Entropy loss", self.loss)
+		
+		
+		
+		logits_reshape = tf.reshape(self.predict, shape=(-1, self.logits.shape[-1]))
+		labels_reshape = tf.reshape(self.Y, shape=(-1, self.Y.shape[-1]))
+		
+		with tf.variable_scope("IoU"):
+			iou = IOU_multiclass_loss(logits_reshape, labels_reshape)
+			loss = tf.subtract(tf.constant(1.0, dtype=tf.float64), iou )
+		
+		self.loss = tf.identity(loss, name="loss")
+		tf.summary.scalar("IOU loss", self.loss)
+		
+		self.accuracy = compute_accuracy(self.Y, self.predict)
+		tf.summary.scalar("accuracy", self.accuracy)
+		
+
+		##################################################################
+		# ~ iou = IoU(self.Y, self.logits)
+		# ~ self.loss = tf.subtract( tf.constant(1.0, dtype=tf.float64), iou, name="loss")
+		# ~ tf.summary.scalar("IoU loss", self.loss)
+		
+		# ~ self.accuracy = compute_accuracy(self.logits, self.Y)
+		# ~ tf.summary.scalar("accuracy", self.accuracy)		
+		##################################################################
+		
+		
+		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-2).minimize(self.loss)
+		self.var_init = tf.global_variables_initializer()
+		
+		self.merged = tf.summary.merge_all()
+	
