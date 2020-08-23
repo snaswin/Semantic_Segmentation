@@ -21,17 +21,17 @@ def reform_datapairs(pathX, pathY, fmtX, fmtY, outfold):
 	xfnames = glob.glob(xpath)
 	for i, xname in enumerate(xfnames):
 		print("# ", i, ", Working on ", xname)
-		num = xname.strip().split("/")[-1].split(".")[0].split("-")[0]
-		yname = pathY + "/" + num + "-inst." + fmtY
+		num = xname.strip().split("/")[-1]
+		yname = pathY + "/" + num
 		
 		if os.path.isfile(yname):
 			#cp xname
 			im = cv2.imread(xname)
-			cv2.imwrite(outfoldx + "/" + num + ".png", im)
+			cv2.imwrite(outfoldx + "/" + str(i) + ".png", im)
 			#cp y
 			im = cv2.imread(yname, 0)
-			im = np.array(im/85, dtype=np.uint8)
-			cv2.imwrite(outfoldy + "/" + num + ".png", im)
+			im = np.array(im/35, dtype=np.uint8)
+			cv2.imwrite(outfoldy + "/" + str(i) + ".png", im)
 
 if __name__ == "__main__":
 		

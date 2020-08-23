@@ -253,10 +253,11 @@ class Model:
 		
 		#create placeholders
 		self.X = tf.placeholder(tf.float64, [None, num1, num2, 1], name="X")
-		self.Y = tf.placeholder(tf.int32, [None, num1, num2], name="Y")
+		self.Y = tf.placeholder(tf.int32, [None, num1, num2, 1], name="Y")
 		# ~ tf.summary.histogram('Y', self.Y)
 		
-		Y_onehot = tf.stop_gradient( tf.one_hot(self.Y, nclass, axis=-1) )
+		Y = tf.reshape(self.Y, shape=(-1, num1, num2) )
+		Y_onehot = tf.stop_gradient( tf.one_hot(Y, nclass, axis=-1, dtype=tf.float64) )
 		
 		self.train_flag = tf.placeholder(tf.bool, name="train_flag")
 		###################################################################
@@ -267,66 +268,76 @@ class Model:
 		A1 = Conv_BN_Act_block(self.X, kernel=[3,3,1,32], strides=[1,2,2,1], name="ConvBA_1", train_flag= self.train_flag)	
 		A2 = max_pool2d(A1, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_2")
 		
-		# ~ #Encode2
-		# ~ A3 = Conv_BN_Act_block(A2, kernel=[3,3,32,16], strides=[1,2,2,1], name="ConvBA_3", train_flag= self.train_flag)		
-		# ~ A4 = max_pool2d(A3, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_4")
+		#Encode2
+		A3 = Conv_BN_Act_block(A2, kernel=[3,3,32,16], strides=[1,2,2,1], name="ConvBA_3", train_flag= self.train_flag)		
+		A4 = max_pool2d(A3, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_4")
 
-		# ~ #Encode3
-		# ~ A5 = Conv_BN_Act_block(A4, kernel=[3,3,16,8], strides=[1,2,2,1], name="ConvBA_5", train_flag= self.train_flag)
-		# ~ A6 = max_pool2d(A5, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_6")
+		#Encode3
+		A5 = Conv_BN_Act_block(A4, kernel=[3,3,16,8], strides=[1,2,2,1], name="ConvBA_5", train_flag= self.train_flag)
+		A6 = max_pool2d(A5, ksize=[1,2,2,1], strides=[1,2,2,1], name="Pool_6")
 		
-		# ~ #Decode4
-		# ~ A7 = conv2d_transpose(A6, kernel=[3,3,8,8], strides=[1,2,2,1], name="ConvTrans_7")
-		# ~ A8 = Conv_BN_Act_block(A7, kernel=[3,3,8,4], strides=[1,2,2,1], name="ConvBA_8", train_flag= self.train_flag)
+		#Decode4
+		A7 = conv2d_transpose(A6, kernel=[3,3,8,8], strides=[1,2,2,1], name="ConvTrans_7")
+		A8 = Conv_BN_Act_block(A7, kernel=[3,3,8,4], strides=[1,2,2,1], name="ConvBA_8", train_flag= self.train_flag)
 		
-		# ~ #Decode5
-		# ~ A9 = conv2d_transpose(A8, kernel=[3,3,4,4], strides=[1,2,2,1], name="ConvTrans_9")
-		# ~ A10 = Conv_BN_Act_block(A9, kernel=[3,3,4,4], strides=[1,2,2,1], name="ConvBA_10", train_flag= self.train_flag)
+		#Decode5
+		A9 = conv2d_transpose(A8, kernel=[3,3,4,4], strides=[1,2,2,1], name="ConvTrans_9")
+		A10 = Conv_BN_Act_block(A9, kernel=[3,3,4,4], strides=[1,2,2,1], name="ConvBA_10", train_flag= self.train_flag)
 		
-		A10 = A2
+		# ~ A10 = A4
 		#Decode6
-		A11 = conv2d_transpose(A10, kernel=[3,3,nclass,32], strides=[1,2,2,1], name="ConvTrans_11")
+		A11 = conv2d_transpose(A10, kernel=[3,3,nclass,4], strides=[1,2,2,1], name="ConvTrans_11")
 		tf.summary.histogram('A11', A11)
 		
 		########
 		self.logits = tf.sigmoid(A11, name = "logits")
 		
-		# ~ self.predict = tf.argmax( self.logits, output_type= tf.int32, axis= 3)
-		# ~ self.predict = tf.expand_dims(self.predict, axis=3, name="predict")
+		self.predict = tf.argmax( self.logits, output_type= tf.int32, axis= 3)
+		self.predict = tf.expand_dims(self.predict, axis=3, name="predict")
 		
+		## Images ##
+		display_image(self.X, name="X")
+		display_image(self.Y, name="Y")
+		#display_image(A1, name="A1")
+		#display_image(A6, name="A6")
+		display_image(A11, name="A11")
+		display_image(self.predict, name="predict")
 		
 		print("A1 : ", A1.shape)
 		print("A2 : ", A2.shape)
 		print("A11 : ", A11.shape)
 		print("Logits : ", self.logits.shape)
-		# ~ print("Predict: ", self.predict.shape)
+		print("Predict: ", self.predict.shape)
 		print("Y : ", self.Y.shape)
 		print("Y_onehot : ", Y_onehot.shape)
 		# ~ tf.summary.histogram('logits', self.logits)
 		# ~ tf.summary.histogram("predict", self.predict)
 		
 		###################################################################
-		#logits_reshape = tf.reshape(self.logits, shape=(-1, self.logits.shape[-1]))
-		#labels_reshape = tf.reshape(Y_onehot, shape=(-1, Y_onehot.shape[-1]))
-		#print("logits ", logits_reshape.dtype)
-		#print("labels ", labels_reshape.dtype)
+		logits_reshape = tf.reshape(self.logits, shape=(-1, self.logits.shape[-1]))
+		labels_reshape = tf.reshape(Y_onehot, shape=(-1, Y_onehot.shape[-1]))
+		print("logits ", logits_reshape.dtype)
+		print("labels ", labels_reshape.dtype)
 		
-		# ~ with tf.variable_scope("IoU"):
-			# ~ iou = IOU_multiclass_loss(logits_reshape, labels_reshape)
-			# ~ loss = tf.subtract(tf.constant(1.0, dtype=tf.float64), iou)
+		with tf.variable_scope("IoU"):
+			loss_constant = tf.Variable(1.0, trainable=False, dtype=tf.float64)
+			iou = IOU_multiclass_loss(logits_reshape, labels_reshape)
+			loss = tf.subtract(loss_constant, iou)
+			
 		
-		# ~ self.loss = tf.identity(loss, name="loss")
-		# ~ tf.summary.scalar("IOU loss", self.loss)
+		#tf.summary.scalar("loss_constant", loss_constant)
+		self.loss = tf.identity(loss, name="loss")
+		tf.summary.scalar("IOU loss", self.loss)
 		
 		# ~ self.loss = tf.reduce_sum(self.logits, name="loss")
 		# ~ print("Loss ", self.loss.dtype)
 		
 		#mean_iou, op = intersection_over_union(prediction, labels)
 		#self.loss, self.loss_op = intersection_over_union(logits_reshape, labels_reshape)
-		self.loss, self.loss_op = tf.metrics.mean_iou(Y_onehot, A11, num_classes=nclass)
+		#self.loss, self.loss_op = tf.metrics.mean_iou(Y_onehot, A11, num_classes=nclass)
 		
-		#self.accuracy = compute_accuracy(self.predict, self.Y)
-		self.accuracy = tf.constant(1.0, dtype=tf.float64)
+		self.accuracy = compute_accuracy(self.predict, self.Y)
+		#self.accuracy = tf.constant(1.0, dtype=tf.float64)
 		tf.summary.scalar("accuracy", self.accuracy)
 		
 		self.optimizer = tf.train.RMSPropOptimizer(learning_rate= 1e-3).minimize(self.loss)
@@ -336,7 +347,7 @@ class Model:
 		##################################################################
 		
 		
-		
+	#NOTE: DNU
 	def define_model_UNet(self,num1, num2, nclass):
 		#create placeholders
 		self.X = tf.placeholder(tf.float64, [None, num1, num2, 1], name="X")
@@ -408,7 +419,7 @@ class Model:
 		A11 = conv2d_transpose(A10a, kernel=[3,3,nclass,16], strides=[1,2,2,1], name="ConvTrans_11")
 		
 		tf.summary.histogram('A11', A11)
-		display_image(A11, name="A11")
+		#display_image(A11, name="A11")
 		
 		########
 		#self.logits = tf.identity(A11, name = "logits")
@@ -416,8 +427,8 @@ class Model:
 		
 		print("Logits shape: ", self.logits.shape)
 		print("Logits type: ", self.logits.dtype)		
-		tf.summary.histogram('logits', self.logits)
-		display_image(self.logits, name="logits")
+		#tf.summary.histogram('logits', self.logits)
+		#display_image(self.logits, name="logits")
 		
 		tf.summary.histogram('A2', A2)
 		tf.summary.histogram('A3', A3)
@@ -485,7 +496,7 @@ class Model:
 			iou = IOU_multiclass_loss(logits_reshape, labels_reshape)
 			loss = tf.subtract(tf.constant(1.0, dtype=tf.float64), iou )
 		
-		self.loss = tf.identity(loss, name="loss")
+		self.loss = tf.identity(loss , name="loss")
 		tf.summary.scalar("IOU loss", self.loss)
 		
 		self.accuracy = compute_accuracy(self.Y, self.predict)
@@ -515,6 +526,9 @@ class Model:
 	def train(self, sess, x_batch, y_batch):
 		summary, loss, _, accu, logits = sess.run( [self.merged, self.loss, self.optimizer, self.accuracy, self.logits], feed_dict={self.X: x_batch, self.Y: y_batch, self.train_flag: True} )
 		return summary, loss, accu
+		#summary, loss, accu = sess.run( [self.merged, self.loss, self.accuracy], feed_dict={self.X: x_batch, self.Y: y_batch, self.train_flag: True} )
+		#return summary, loss, accu
+		
 	
 def read_js(fname="./data_pairs.json"):
 	with open(fname, 'r') as infile:
@@ -763,9 +777,9 @@ if __name__ == "__main__":
 	print("############################### \nOutfold is ", outfold, "\n###############################")
 	
 	fmt = "png"
-	batch_size = 1
+	batch_size = 16
 	shuffle = True
-	fetch_size = 500
+	fetch_size = 100
 	num1 = 512
 	num2 = 512
 	nclass = 4
