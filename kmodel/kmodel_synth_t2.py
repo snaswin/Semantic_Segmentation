@@ -6,40 +6,33 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.keras.preprocessing.image import load_img
 import random
-import matplotlib.pyplot as plt
 import pathlib
-
+from keras.callbacks import CSVLogger
 
 #Prep paths
-#main_dir = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed/"
+main_dir = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed/"
 #main_dir = "/data/McMaster/real_kmodel/glove_overhand_1_output/"
-main_dir = "/data/McMaster/real_data_full/real_full_reformed/"
+
 input_dir = main_dir + "/X/"
 target_dir = main_dir + "/Y/"
+fetch_size = 5000
 
-#chpt
-#check_dir = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed_Kout/2/"
-#check_dir = "/data/McMaster/real_kmodel/glove_overhand_1_output_Kout_small/0/"
-check_dir = "/data/McMaster/real_data_full/real_full_reformed_Ksmall_full/2/"
-epoch = "60"
-
-checkpoint_dir = check_dir + "/model/"
-latest = checkpoint_dir + "/synth_segmentation-" + epoch +".hdf5"
-print("\n\nLatest is ", latest)
-
-#outfold
-outfold = check_dir + "/visualize/" + epoch + "/"
+outfold = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed_Kout_small/"
 pathlib.Path(outfold).mkdir(exist_ok=True, parents=True)
+outfold = outfold + "/" + str(len(os.listdir(outfold))) +"/"
+
 
 img_size = (512, 512)
 num_classes = 4
 batch_size = 32
 
-
-input_img_paths = sorted( glob.glob(input_dir + "/*.png") )
-target_img_paths = sorted( glob.glob(target_dir + "/*.png") )
+input_img_paths = sorted( glob.glob(input_dir + "/*.png") )[:fetch_size]
+target_img_paths = sorted( glob.glob(target_dir + "/*.png") )[:fetch_size]
 
 print("Num of ims- ", len(input_img_paths))
+
+for ipath, tpath in zip(input_img_paths[:5], target_img_paths[:5]):
+	print(ipath, " & ", tpath)
 
 
 class Data_handler(tf.keras.utils.Sequence):
@@ -76,6 +69,8 @@ class Data_handler(tf.keras.utils.Sequence):
 			
 		return np.asarray(batch_x), np.asarray(batch_y)
 		
+
+#MODEL
 def get_model(img_size, num_class):
 	inputs = tf.keras.Input( shape=img_size + (1,) )
 	
@@ -88,7 +83,7 @@ def get_model(img_size, num_class):
 	
 	#Blocks 1,2,3 except the filters
 	
-	for filters in [8, 16, 32]:
+	for filters in [8,16,32]:
 		x = tf.keras.layers.Activation("relu")(x)
 		x = tf.keras.layers.SeparableConv2D(filters, 3, padding="same")(x)
 		x = tf.keras.layers.BatchNormalization()(x)
@@ -131,8 +126,16 @@ def get_model(img_size, num_class):
 	model = tf.keras.Model(inputs, outputs)
 	return model
 
+#tf reset graph
+tf.keras.backend.clear_session()
+
+#build
+model = get_model(img_size, num_classes)
+model.summary()
+
+
 #Validation split
-val_samples = 50
+val_samples = int(0.1 * fetch_size)
 random.Random(7).shuffle(input_img_paths)
 random.Random(7).shuffle(target_img_paths)
 
@@ -146,71 +149,26 @@ val_ypath = target_img_paths[-val_samples:]
 train_handle = Data_handler(batch_size, img_size, train_xpath, train_ypath)
 val_handle = Data_handler(batch_size, img_size, val_xpath, val_ypath)
 
-### Model
-# ~ latest = tf.train.latest_checkpoint(checkpoint_dir)
-# ~ print("\n\nLatest checkpoint is ", latest)
-# ~ latest = "/home/ai-nano/Documents/Segmentation_keras/synth_segmentation-01-0.53.hdf5"
-# ~ print("\n\nLatest is ", latest)
-
-#tf reset graph
-tf.keras.backend.clear_session()
-
-#build
-model = get_model(img_size, num_classes)
-model.load_weights(latest)
-model.summary()
-
 #Compile graph
-opt = tf.keras.optimizers.RMSprop(learning_rate=1e-2)
+opt = tf.keras.optimizers.RMSprop(learning_rate=1e-3)
 model.compile(optimizer=opt, loss="sparse_categorical_crossentropy", metrics="accuracy")
 
-# ~ #eval
-# ~ test_images, test_labels = val_handle.__getitem__(1)
-# ~ loss, acc = model.evaluate(test_images,  test_labels, verbose=2)
-# ~ print("Validation results - ", loss, acc)
+model_fold = outfold + "/model/"
+pathlib.Path(model_fold).mkdir(exist_ok=True, parents=True)
 
+# ~ filepath= "synth_segmentation-{epoch:02d}-{val_accuracy:.2f}.hdf5"
+filepath= model_fold + "synth_segmentation-{epoch:02d}.hdf5"
+csv_logger = CSVLogger(outfold + '/log.csv', append=True, separator=',')
 
-def display_pred(val_pred, i):
-	pred = np.argmax( val_pred[i], axis=-1)
-	pred = np.expand_dims(pred, axis=-1)
-	im = tf.keras.preprocessing.image.array_to_img(pred)
-	return im
+callbacks = [tf.keras.callbacks.ModelCheckpoint(filepath, 
+				monitor='val_loss', 
+				verbose=0, 
+				save_best_only=False, 
+				save_weights_only=False, 
+				mode='auto', 
+				period=1), csv_logger]
 
-def output_pred(val_pred):
-	pred = np.argmax(val_pred, axis=-1)
-	pred = np.expand_dims(pred, axis=-1)
-	return pred
-
-#predict
-batch = 3
-imx, imy = train_handle.__getitem__(batch)
-val_pred = model.predict(imx)
-imyhat = output_pred(val_pred)
-print(imyhat.shape)
-
-# ~ n = 1
-# ~ fig, ax = plt.subplots(3)
-# ~ ax[0].imshow(imx[n][:,:,0])
-# ~ ax[1].imshow(imyhat[n][:,:,0])
-# ~ ax[2].imshow(imy[n][:,:,0])
-# ~ plt.show()
-
-ns = imx.shape[0]
-imx_fold = outfold + "/imx/"
-imyhat_fold = outfold + "/imyhat/"
-imy_fold = outfold + "/imy_fold/"
-pathlib.Path(imx_fold).mkdir(exist_ok=True, parents=True)
-pathlib.Path(imyhat_fold).mkdir(exist_ok=True, parents=True)
-pathlib.Path(imy_fold).mkdir(exist_ok=True, parents=True)
-for n in range(ns):
-	num = batch*batch_size + n
-	plt.imsave(imx_fold + "/" + str(num) + ".png", imx[n][:,:,0] )
-	plt.imsave(imyhat_fold + "/" + str(num) + ".png", imyhat[n][:,:,0] )
-	plt.imsave(imy_fold + "/" + str(num) + ".png", imy[n][:,:,0] )
-	
-
-
-# ~ im = display_pred(val_pred, 0)
-# ~ plt.imshow(im)
-# ~ plt.show()
+#Start training
+epochs = 150
+model.fit(train_handle, epochs=epochs, validation_data = val_handle, callbacks=callbacks)
 

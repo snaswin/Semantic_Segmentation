@@ -11,13 +11,14 @@ from keras.callbacks import CSVLogger
 
 #Prep paths
 #main_dir = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed/"
-main_dir = "/data/McMaster/real_kmodel/glove_overhand_1_output/"
+#main_dir = "/data/McMaster/real_kmodel/glove_overhand_1_output/"
+main_dir = "/data/McMaster/real_data_full/real_full_reformed/"
 
 input_dir = main_dir + "/X/"
 target_dir = main_dir + "/Y/"
-fetch_size = 338
+fetch_size = 5500
 
-outfold = "/data/McMaster/real_kmodel/glove_overhand_1_output_Kout_small/"
+outfold = "/data/McMaster/real_data_full/real_full_reformed_Ksmall_full/"
 pathlib.Path(outfold).mkdir(exist_ok=True, parents=True)
 outfold = outfold + "/" + str(len(os.listdir(outfold))) +"/"
 
@@ -150,7 +151,7 @@ train_handle = Data_handler(batch_size, img_size, train_xpath, train_ypath)
 val_handle = Data_handler(batch_size, img_size, val_xpath, val_ypath)
 
 #Compile graph
-opt = tf.keras.optimizers.RMSprop(learning_rate=1e-3)
+opt = tf.keras.optimizers.RMSprop(learning_rate=1e-4)
 model.compile(optimizer=opt, loss="sparse_categorical_crossentropy", metrics="accuracy")
 
 model_fold = outfold + "/model/"

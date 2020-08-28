@@ -11,24 +11,27 @@ import pathlib
 
 
 #Prep paths
-#main_dir = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed/"
-#main_dir = "/data/McMaster/real_kmodel/glove_overhand_1_output/"
 main_dir = "/data/McMaster/real_data_full/real_full_reformed/"
+real = True
+
+#main_dir = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed/"
 input_dir = main_dir + "/X/"
 target_dir = main_dir + "/Y/"
 
 #chpt
 #check_dir = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed_Kout/2/"
-#check_dir = "/data/McMaster/real_kmodel/glove_overhand_1_output_Kout_small/0/"
-check_dir = "/data/McMaster/real_data_full/real_full_reformed_Ksmall_full/2/"
-epoch = "60"
+check_dir = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed_Kout_small/0/"
+epoch = "50"
 
 checkpoint_dir = check_dir + "/model/"
 latest = checkpoint_dir + "/synth_segmentation-" + epoch +".hdf5"
 print("\n\nLatest is ", latest)
 
 #outfold
-outfold = check_dir + "/visualize/" + epoch + "/"
+if real == True:
+	outfold = check_dir + "/visualize_real/" + epoch + "/"
+else:
+	outfold = check_dir + "/visualize/" + epoch + "/"
 pathlib.Path(outfold).mkdir(exist_ok=True, parents=True)
 
 img_size = (512, 512)

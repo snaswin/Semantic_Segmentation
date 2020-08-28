@@ -10,17 +10,18 @@ xpath = mainfold + "Labeled_Dataset/*/PNGImages/*.png"
 ypath = mainfold + "Labeled_Dataset/*/SegmentationClassPNG/*.png"
 vispath = mainfold + "Labeled_Dataset/*/SegmentationClassVisualization/*.jpg"
 
-outfold = "/data/McMaster/real_data/real_reformed/"
+outfold = "/data/McMaster/real_data_full/real_full_reformed/"
 
-xnames = glob.glob(xpath)
-ynames = glob.glob(ypath)
-vnames = glob.glob(vispath)
+
+xnames = sorted(glob.glob(xpath))
+ynames = sorted(glob.glob(ypath))
+vnames = sorted(glob.glob(vispath))
 
 print("Total images sets: ", len(xnames))
 
 xout = outfold + "/X/"
-yout = outfold + "/Y_vis/"
-vout = outfold + "/Y_overlap/"
+yout = outfold + "/Y/"
+vout = outfold + "/Y_vis/"
 
 pathlib.Path(xout).mkdir(exist_ok=True, parents=True)
 pathlib.Path(yout).mkdir(exist_ok=True, parents=True)
@@ -35,15 +36,16 @@ for i, yname in enumerate(ynames):
 	im = cv2.imread(ynames[i], 0)
 	im = im/35
 	im = np.array(im, dtype=np.uint8)
-	for ii in range(im.shape[0]):
-		for jj in range(im.shape[1]):
-			if abs(im[ii][jj] - 2.0) <0.001:
-				im[ii][jj] = 3
-			elif abs(im[ii][jj] - 3.0) <0.001:
-				im[ii][jj] = 2
-			else:
-				pass
-	im = im * 35
+	# ~ for ii in range(im.shape[0]):
+		# ~ for jj in range(im.shape[1]):
+			# ~ if abs(im[ii][jj] - 2.0) <0.001:
+				# ~ im[ii][jj] = 3
+			# ~ elif abs(im[ii][jj] - 3.0) <0.001:
+				# ~ im[ii][jj] = 2
+			# ~ else:
+				# ~ pass
+	# ~ im = im * 35
+	
 	
 	name = "{0:05}".format(i) + ".png"
 	print(i, " Working on ", name)
