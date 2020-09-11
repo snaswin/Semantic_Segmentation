@@ -7,9 +7,10 @@ import pathlib
 import matplotlib.pyplot as plt
 import pandas as pd
 
-mainfold = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed_Kout_small/0/"
+#mainfold = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed_Kout_small/0/"
 #mainfold = "/data/McMaster/real_kmodel/glove_overhand_1_output_Kout_small/0/"
 #mainfold = "/data/McMaster/real_data_full/real_full_reformed_Ksmall_full/2/"
+mainfold = "/data/McMaster/Combined/Output/comb_Kout_small/0/"
 save = True
 
 fname = mainfold + "/log.csv"

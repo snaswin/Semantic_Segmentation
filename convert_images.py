@@ -5,7 +5,8 @@ from tqdm import tqdm
 import pathlib
 import os
 
-main_folder = "Labeled Datast/"
+#main_folder = "Labeled Datast/"
+main_folder = "/data/McMaster/remasked/Occlusion Dataset/"
 
 subs = os.listdir(main_folder)
 for sub in subs:

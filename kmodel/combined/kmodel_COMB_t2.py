@@ -11,8 +11,8 @@ from keras.callbacks import CSVLogger
 
 #Prep paths
 main_dir_1 = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed/"
-main_dir_2 = "/data/McMaster/real_data_full/real_full_reformed/"
-outfold = "/data/McMaster/Combined/comb_Kout_small/"
+main_dir_2 = "/data/McMaster/Combined/remasked_occlusion_full/"
+outfold = "/data/McMaster/Combined/Output/comb_Kout_small/"
 fetch_size = 5000
 
 pathlib.Path(outfold).mkdir(exist_ok=True, parents=True)

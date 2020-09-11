@@ -5,12 +5,16 @@ from tqdm import tqdm
 import pathlib
 import os
 
-mainfold = "/data/McMaster/real_data/"
-xpath = mainfold + "Labeled_Dataset/*/PNGImages/*.png"
-ypath = mainfold + "Labeled_Dataset/*/SegmentationClassPNG/*.png"
-vispath = mainfold + "Labeled_Dataset/*/SegmentationClassVisualization/*.jpg"
+# ~ mainfold = "/data/McMaster/real_data/"
+# ~ xpath = mainfold + "Labeled_Dataset/*/PNGImages/*.png"
+# ~ ypath = mainfold + "Labeled_Dataset/*/SegmentationClassPNG/*.png"
+# ~ vispath = mainfold + "Labeled_Dataset/*/SegmentationClassVisualization/*.jpg"
+mainfold = "/data/McMaster/remasked/"
+xpath = mainfold + "/Occlusion Dataset/*/PNGImages/*.png"
+ypath = mainfold + "/remasked_occlusion/*/SegmentationClassPNG/*.png"
+vispath = mainfold + "/Occlusion Dataset/*/SegmentationClassVisualization/*.jpg"
 
-outfold = "/data/McMaster/real_data_full/real_full_reformed/"
+outfold = "/data/McMaster/Combined/remasked_occlusion_full/"
 
 
 xnames = sorted(glob.glob(xpath))
@@ -34,28 +38,29 @@ for i, yname in enumerate(ynames):
 	
 	## Y
 	im = cv2.imread(ynames[i], 0)
-	im = im/35
+	im = im/84.0
 	im = np.array(im, dtype=np.uint8)
-	# ~ for ii in range(im.shape[0]):
-		# ~ for jj in range(im.shape[1]):
-			# ~ if abs(im[ii][jj] - 2.0) <0.001:
-				# ~ im[ii][jj] = 3
-			# ~ elif abs(im[ii][jj] - 3.0) <0.001:
-				# ~ im[ii][jj] = 2
-			# ~ else:
-				# ~ pass
-	# ~ im = im * 35
-	
 	
 	name = "{0:05}".format(i) + ".png"
 	print(i, " Working on ", name)
-	cv2.imwrite(yout+"/"+ name, im)
-	
-	## X
-	im = cv2.imread(xnames[i])
-	cv2.imwrite(xout+"/"+name, im)
-	
-	## V
-	im = cv2.imread(vnames[i])
-	cv2.imwrite(vout+"/"+name, im)
 
+	xn = xnames[i].strip().split("/")[-1].split(".")[0]
+	yn = ynames[i].strip().split("/")[-1].split(".")[0]
+	vn = vnames[i].strip().split("/")[-1].split(".")[0]
+	
+	if yn == xn and yn == vn:
+		cv2.imwrite(yout+"/"+ name, im)
+		
+		## X
+		im = cv2.imread(xnames[i])
+		cv2.imwrite(xout+"/"+name, im)
+		
+		## V
+		im = cv2.imread(vnames[i])
+		cv2.imwrite(vout+"/"+name, im)
+	else:
+		print("At ", i)
+		print("\t", xn)
+		print("\t", yn)
+		print("\t", vn)
+		

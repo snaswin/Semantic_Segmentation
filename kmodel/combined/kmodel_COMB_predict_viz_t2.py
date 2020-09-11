@@ -11,7 +11,8 @@ import pathlib
 
 
 #Prep paths
-main_dir = "/data/McMaster/real_data_full/real_full_reformed/"
+#main_dir = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed/"
+main_dir = "/data/McMaster/Combined/remasked_occlusion_full/"
 real = True
 
 #main_dir = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed/"
@@ -20,8 +21,8 @@ target_dir = main_dir + "/Y/"
 
 #chpt
 #check_dir = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed_Kout/2/"
-check_dir = "/data/McMaster/enclosure_2/enclosure-20-07-10-10-30-51_reformed_Kout_small/0/"
-epoch = "50"
+check_dir = "/data/McMaster/Combined/Output/comb_Kout_small/0/"
+epoch = "66"
 
 checkpoint_dir = check_dir + "/model/"
 latest = checkpoint_dir + "/synth_segmentation-" + epoch +".hdf5"
